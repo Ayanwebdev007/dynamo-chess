@@ -555,147 +555,157 @@ class _BoardScreenState extends State<BoardScreen> {
           ),
 
           Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 450),
-              child: Scaffold(
-                backgroundColor: Colors.transparent,
-                appBar: GameHeader(
-                  settings: widget.settings,
-                ),
-                body: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    children: [
-                      // Move History (Replaced Turn Status)
-                      _buildMoveHistory(),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isWide = constraints.maxWidth > 900;
+                
+                if (isWide) {
+                  return _buildDesktopLayout(constraints);
+                }
 
-                      // Opponent Profile (Top)
-                      PlayerProfileWidget(
-                        name: topColor == PlayerColor.white ? _whitePlayerName : _blackPlayerName,
-                        flagAsset: "assets/inflag.png",
-                        avatarUrl: "", // Clear broken URL
-                        time: _formatTime(topTime),
-                        isOpponent: true,
-                        isActive: _gameState.status == GameStatus.playing && _gameState.turn == topColor,
-                        capturedPieces: topCaptured,
-                        scoreAdvantage: scoreAdvantages[topColor],
-                        capturedPiecesColor: topColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white,
-                      ),
-                      
-                      const SizedBox(height: 4),
+                return ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 450),
+                  child: Scaffold(
+                    backgroundColor: Colors.transparent,
+                    appBar: GameHeader(
+                      settings: widget.settings,
+                    ),
+                    body: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        children: [
+                          // Move History (Replaced Turn Status)
+                          _buildMoveHistory(),
 
-                      // Game Board Area
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 0.0),
-                        child: AspectRatio(
-                          aspectRatio: 1.0,
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final boardSize = constraints.maxWidth;
-                              final squareSize = boardSize / 10;
-                              return GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTapDown: (details) {
-                                  print("TAP AT: ${details.localPosition}");
-                                  final x = (details.localPosition.dx / squareSize).floor();
-                                  final y = (details.localPosition.dy / squareSize).floor();
-                                  print("SQUARE: ($x, $y)");
-                                  _onSquareTapped(Position(
-                                    widget.onlineRoomId != null && !widget.isWhite ? 9 - x : x,
-                                    widget.onlineRoomId != null && !widget.isWhite ? 9 - y : y,
-                                  ));
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
-                                    ],
-                                  ),
-                                  child: Stack(
-                                    children: [
-                                      // Layer 1: Board Squares (Background)
-                                      SizedBox(
-                                        width: boardSize,
-                                        height: boardSize,
-                                        child: _buildBoardBackground(squareSize, theme: _settings.boardTheme, showCoords: _settings.showCoordinates),
-                                      ),
-
-                                      // Layer 2: Background Highlights (Last Move, Selection, Check) - BELOW Images
-                                      IgnorePointer(
-                                        child: CustomPaint(
-                                          size: Size(boardSize, boardSize),
-                                          painter: BoardHighlightPainter(
-                                            board: _gameState.board,
-                                            selectedPosition: _gameState.selectedPosition,
-                                            showLastMove: _settings.showLastMove,
-                                            lastMove: _gameState.history.isNotEmpty ? _gameState.history.last : null,
-                                            lastMoveStart: _gameState.lastMoveStart,
-                                            lastMoveEnd: _gameState.lastMoveEnd,
-                                            checkPos: RulesEngine.isCheck(_gameState.turn, _gameState.board) 
-                                               ? _findKing(_gameState.turn) 
-                                               : null,
-                                            isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
-                                          ),
-                                        ),
-                                      ),
-                                      
-                                      // Layer 3: Pieces (Platform Views - Transparent Background)
-                                      SizedBox(
-                                        width: boardSize,
-                                        height: boardSize,
-                                        child: _buildPiecesLayer(squareSize),
-                                      ),
-
-                                      // Layer 4: Foreground Hints (Valid Moves) - ABOVE Images
-                                      IgnorePointer(
-                                        child: CustomPaint(
-                                          size: Size(boardSize, boardSize),
-                                          painter: BoardForegroundPainter(
-                                            board: _gameState.board,
-                                            validMoves: _settings.showLegalMoves ? _gameState.validMoves : [],
-                                            isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                          // Opponent Profile (Top)
+                          PlayerProfileWidget(
+                            name: topColor == PlayerColor.white ? _whitePlayerName : _blackPlayerName,
+                            flagAsset: "assets/inflag.png",
+                            avatarUrl: "", // Clear broken URL
+                            time: _formatTime(topTime),
+                            isOpponent: true,
+                            isActive: _gameState.status == GameStatus.playing && _gameState.turn == topColor,
+                            capturedPieces: topCaptured,
+                            scoreAdvantage: scoreAdvantages[topColor],
+                            capturedPiecesColor: topColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white,
                           ),
-                        ),
+                          
+                          const SizedBox(height: 4),
+
+                          // Game Board Area
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                            child: AspectRatio(
+                              aspectRatio: 1.0,
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final boardSize = constraints.maxWidth;
+                                  final squareSize = boardSize / 10;
+                                  return GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTapDown: (details) {
+                                      print("TAP AT: ${details.localPosition}");
+                                      final x = (details.localPosition.dx / squareSize).floor();
+                                      final y = (details.localPosition.dy / squareSize).floor();
+                                      print("SQUARE: ($x, $y)");
+                                      _onSquareTapped(Position(
+                                        widget.onlineRoomId != null && !widget.isWhite ? 9 - x : x,
+                                        widget.onlineRoomId != null && !widget.isWhite ? 9 - y : y,
+                                      ));
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        boxShadow: [
+                                          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
+                                        ],
+                                      ),
+                                      child: Stack(
+                                        children: [
+                                          // Layer 1: Board Squares (Background)
+                                          SizedBox(
+                                            width: boardSize,
+                                            height: boardSize,
+                                            child: _buildBoardBackground(squareSize, theme: _settings.boardTheme, showCoords: _settings.showCoordinates),
+                                          ),
+
+                                          // Layer 2: Background Highlights (Last Move, Selection, Check) - BELOW Images
+                                          IgnorePointer(
+                                            child: CustomPaint(
+                                              size: Size(boardSize, boardSize),
+                                              painter: BoardHighlightPainter(
+                                                board: _gameState.board,
+                                                selectedPosition: _gameState.selectedPosition,
+                                                showLastMove: _settings.showLastMove,
+                                                lastMove: _gameState.history.isNotEmpty ? _gameState.history.last : null,
+                                                lastMoveStart: _gameState.lastMoveStart,
+                                                lastMoveEnd: _gameState.lastMoveEnd,
+                                                checkPos: RulesEngine.isCheck(_gameState.turn, _gameState.board) 
+                                                   ? _findKing(_gameState.turn) 
+                                                   : null,
+                                                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                                              ),
+                                            ),
+                                          ),
+                                          
+                                          // Layer 3: Pieces (Platform Views - Transparent Background)
+                                          SizedBox(
+                                            width: boardSize,
+                                            height: boardSize,
+                                            child: _buildPiecesLayer(squareSize),
+                                          ),
+
+                                          // Layer 4: Foreground Hints (Valid Moves) - ABOVE Images
+                                          IgnorePointer(
+                                            child: CustomPaint(
+                                              size: Size(boardSize, boardSize),
+                                              painter: BoardForegroundPainter(
+                                                board: _gameState.board,
+                                                validMoves: _settings.showLegalMoves ? _gameState.validMoves : [],
+                                                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 4),
+
+                          // User Profile (Bottom)
+                          PlayerProfileWidget(
+                            name: bottomColor == PlayerColor.white ? _whitePlayerName : _blackPlayerName,
+                            flagAsset: "assets/inflag.png",
+                            avatarUrl: "", // Clear broken URL
+                            time: _formatTime(bottomTime),
+                            isOpponent: false,
+                            isActive: _gameState.status == GameStatus.playing && _gameState.turn == bottomColor,
+                            capturedPieces: bottomCaptured,
+                            scoreAdvantage: scoreAdvantages[bottomColor],
+                            capturedPiecesColor: bottomColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white,
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          // Bottom Controls
+                          BottomControls(
+                            onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim, // Draw claim logic for online matches pending
+                            canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
+                            onChat: widget.onlineRoomId != null ? _showChat : null,
+                            onResign: _gameState.status == GameStatus.playing ? _showResignDialog : null,
+                            showChatBadge: _hasNewMessages,
+                          ),
+                        ],
                       ),
-
-                      const SizedBox(height: 4),
-
-                      // User Profile (Bottom)
-                      PlayerProfileWidget(
-                        name: bottomColor == PlayerColor.white ? _whitePlayerName : _blackPlayerName,
-                        flagAsset: "assets/inflag.png",
-                        avatarUrl: "", // Clear broken URL
-                        time: _formatTime(bottomTime),
-                        isOpponent: false,
-                        isActive: _gameState.status == GameStatus.playing && _gameState.turn == bottomColor,
-                        capturedPieces: bottomCaptured,
-                        scoreAdvantage: scoreAdvantages[bottomColor],
-                        capturedPiecesColor: bottomColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white,
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      // Bottom Controls
-                      BottomControls(
-                        onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim, // Draw claim logic for online matches pending
-                        canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
-                        onChat: widget.onlineRoomId != null ? _showChat : null,
-                        onResign: _gameState.status == GameStatus.playing ? _showResignDialog : null,
-                        showChatBadge: _hasNewMessages,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
           
@@ -735,6 +745,270 @@ class _BoardScreenState extends State<BoardScreen> {
           // Waiting overlay when Player A is waiting for Player B to accept invitation
           if (_firebaseGameStatus == 'waiting') _buildWaitingOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(BoxConstraints constraints) {
+    final bool amIWhite = widget.onlineRoomId == null ? true : widget.isWhite;
+    final PlayerColor topColor = amIWhite ? PlayerColor.black : PlayerColor.white;
+    final PlayerColor bottomColor = amIWhite ? PlayerColor.white : PlayerColor.black;
+    final Duration topTime = topColor == PlayerColor.white ? _gameState.whiteTime : _gameState.blackTime;
+    final Duration bottomTime = bottomColor == PlayerColor.white ? _gameState.whiteTime : _gameState.blackTime;
+
+    final topCaptured = ScoreCalculator.getCapturedPieces(_gameState.history, topColor);
+    final bottomCaptured = ScoreCalculator.getCapturedPieces(_gameState.history, bottomColor);
+    final scoreAdvantages = ScoreCalculator.getScoreAdvantage(_gameState.history);
+
+    // Calculate board size based on available height mostly, but also width
+    final double sidebarWidth = 350;
+    final double availableWidth = constraints.maxWidth - sidebarWidth - 64; // Padding
+    final double availableHeight = constraints.maxHeight - 100; // Padding for header/footer
+    final double boardSize = (availableWidth < availableHeight ? availableWidth : availableHeight).clamp(400, 800);
+
+    return Row(
+      children: [
+        // Left Side: Board
+        Expanded(
+          flex: 3,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GameHeader(settings: widget.settings),
+              const SizedBox(height: 20),
+              Container(
+                width: boardSize,
+                height: boardSize,
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40, offset: const Offset(0, 20)),
+                  ],
+                ),
+                child: _buildBoardWidget(boardSize),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+
+        // Right Side: Sidebar
+        Container(
+          width: sidebarWidth,
+          height: double.infinity,
+          margin: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Column(
+                children: [
+                  // Opponent
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: PlayerProfileWidget(
+                      name: topColor == PlayerColor.white ? _whitePlayerName : _blackPlayerName,
+                      flagAsset: "assets/inflag.png",
+                      avatarUrl: "",
+                      time: _formatTime(topTime),
+                      isOpponent: true,
+                      isActive: _gameState.status == GameStatus.playing && _gameState.turn == topColor,
+                      capturedPieces: topCaptured,
+                      scoreAdvantage: scoreAdvantages[topColor],
+                      capturedPiecesColor: topColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white,
+                    ),
+                  ),
+    
+                  const Divider(color: Colors.white10, height: 1),
+    
+                  // Move History (Expanded for Desktop)
+                  Expanded(
+                    child: _buildDesktopMoveHistory(),
+                  ),
+    
+                  const Divider(color: Colors.white10, height: 1),
+    
+                  // My Profile
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: PlayerProfileWidget(
+                      name: bottomColor == PlayerColor.white ? _whitePlayerName : _blackPlayerName,
+                      flagAsset: "assets/inflag.png",
+                      avatarUrl: "",
+                      time: _formatTime(bottomTime),
+                      isOpponent: false,
+                      isActive: _gameState.status == GameStatus.playing && _gameState.turn == bottomColor,
+                      capturedPieces: bottomCaptured,
+                      scoreAdvantage: scoreAdvantages[bottomColor],
+                      capturedPiecesColor: bottomColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white,
+                    ),
+                  ),
+    
+                  // Controls
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: BottomControls(
+                      onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim,
+                      canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
+                      onChat: widget.onlineRoomId != null ? _showChat : null,
+                      onResign: _gameState.status == GameStatus.playing ? _showResignDialog : null,
+                      showChatBadge: _hasNewMessages,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBoardWidget(double boardSize) {
+    final squareSize = boardSize / 10;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) {
+        final x = (details.localPosition.dx / squareSize).floor();
+        final y = (details.localPosition.dy / squareSize).floor();
+        _onSquareTapped(Position(
+          widget.onlineRoomId != null && !widget.isWhite ? 9 - x : x,
+          widget.onlineRoomId != null && !widget.isWhite ? 9 - y : y,
+        ));
+      },
+      child: Stack(
+        children: [
+          // Layer 1: Board Squares
+          SizedBox(
+            width: boardSize,
+            height: boardSize,
+            child: _buildBoardBackground(squareSize, theme: _settings.boardTheme, showCoords: _settings.showCoordinates),
+          ),
+
+          // Layer 2: Background Highlights
+          IgnorePointer(
+            child: CustomPaint(
+              size: Size(boardSize, boardSize),
+              painter: BoardHighlightPainter(
+                board: _gameState.board,
+                selectedPosition: _gameState.selectedPosition,
+                showLastMove: _settings.showLastMove,
+                lastMove: _gameState.history.isNotEmpty ? _gameState.history.last : null,
+                lastMoveStart: _gameState.lastMoveStart,
+                lastMoveEnd: _gameState.lastMoveEnd,
+                checkPos: RulesEngine.isCheck(_gameState.turn, _gameState.board) 
+                   ? _findKing(_gameState.turn) 
+                   : null,
+                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+              ),
+            ),
+          ),
+          
+          // Layer 3: Pieces
+          SizedBox(
+            width: boardSize,
+            height: boardSize,
+            child: _buildPiecesLayer(squareSize),
+          ),
+
+          // Layer 4: Foreground Hints
+          IgnorePointer(
+            child: CustomPaint(
+              size: Size(boardSize, boardSize),
+              painter: BoardForegroundPainter(
+                board: _gameState.board,
+                validMoves: _settings.showLegalMoves ? _gameState.validMoves : [],
+                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopMoveHistory() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            "MOVE HISTORY",
+            style: GoogleFonts.cinzel(
+              color: const Color(0xFFD4AF37),
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2.0,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            controller: _moveScrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: (_gameState.history.length / 2).ceil(),
+            itemBuilder: (context, index) {
+              final whiteMoveIndex = index * 2;
+              final blackMoveIndex = index * 2 + 1;
+              final moveNumber = index + 1;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        "$moveNumber.",
+                        style: GoogleFonts.robotoMono(color: Colors.white38, fontSize: 13),
+                      ),
+                    ),
+                    Expanded(child: _buildMoveText(whiteMoveIndex)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildMoveText(blackMoveIndex)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMoveText(int index) {
+    if (index >= _gameState.history.length) return const SizedBox();
+    
+    final move = _gameState.history[index];
+    final startFile = String.fromCharCode(97 + move.start.x);
+    final startRank = 10 - move.start.y;
+    final endFile = String.fromCharCode(97 + move.end.x);
+    final endRank = 10 - move.end.y;
+    final moveText = "$startFile$startRank-$endFile$endRank";
+
+    final isLastMove = index == _gameState.history.length - 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isLastMove ? const Color(0xFFD4AF37).withOpacity(0.2) : Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isLastMove ? const Color(0xFFD4AF37).withOpacity(0.5) : Colors.transparent,
+        ),
+      ),
+      child: Text(
+        moveText,
+        style: GoogleFonts.robotoMono(
+          color: isLastMove ? const Color(0xFFD4AF37) : Colors.white70,
+          fontWeight: isLastMove ? FontWeight.bold : FontWeight.normal,
+          fontSize: 13,
+        ),
       ),
     );
   }
