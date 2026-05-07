@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "113235320266",
+    "firebase_url": "https://dynamo-chess-6ad12-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "dynamo-chess-6ad12",
+    "storage_bucket": "dynamo-chess-6ad12.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113235320266:android:ea60af34ffd4ec9d648333",
+        "android_client_info": {
+          "package_name": "com.dynamo.dynamochessnew"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzYCRfug8djoR9rB9oo2gTT1cNz90hOP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113235320266:android:d95e93bb4681b38d648333",
+        "android_client_info": {
+          "package_name": "com.example.dynamo_chess"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzYCRfug8djoR9rB9oo2gTT1cNz90hOP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113235320266:android:2ea7bc0f07d6a14f648333",
+        "android_client_info": {
+          "package_name": "in.advancedchess"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzYCRfug8djoR9rB9oo2gTT1cNz90hOP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,78 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'notification_service_base.dart';
+import 'online_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+class NotificationService implements NotificationServiceBase {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+
+  @override
+  Future<void> init() async {
+    // 1. Request FCM Permissions
+    await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // 2. Setup Local Notifications
+    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
+    
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+    
+    await _localNotifications.initialize(initSettings);
+
+    // 3. Get and Save FCM Token
+    try {
+      String? token = await _fcm.getToken();
+      if (token != null) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await OnlineService().saveFcmToken(user.uid, token);
+        }
+      }
+    } catch (e) {
+      print("Error saving FCM token: $e");
+    }
+
+    // 4. Listen for foreground FCM messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        showNotification(
+          message.notification!.title ?? "New Challenge",
+          message.notification!.body ?? "Someone challenged you!",
+        );
+      }
+    });
+  }
+
+  @override
+  void showNotification(String title, String body) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'challenges_channel',
+      'Game Challenges',
+      channelDescription: 'Notifications for new game invitations',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    
+    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+    
+    await _localNotifications.show(
+      DateTime.now().millisecond,
+      title,
+      body,
+      platformDetails,
+    );
+  }
+}
