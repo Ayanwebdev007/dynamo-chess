@@ -13,7 +13,12 @@
           "package_name": "com.dynamo.dynamochessnew"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "113235320266-su1i0t3rfgus7ftkc95nanitbf6gl8q6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDzYCRfug8djoR9rB9oo2gTT1cNz90hOP0"
@@ -21,7 +26,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "113235320266-su1i0t3rfgus7ftkc95nanitbf6gl8q6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
@@ -32,7 +42,12 @@
           "package_name": "com.example.dynamo_chess"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "113235320266-su1i0t3rfgus7ftkc95nanitbf6gl8q6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDzYCRfug8djoR9rB9oo2gTT1cNz90hOP0"
@@ -40,7 +55,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "113235320266-su1i0t3rfgus7ftkc95nanitbf6gl8q6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
@@ -51,7 +71,28 @@
           "package_name": "in.advancedchess"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "113235320266-2n8da2nm9k7ll5hm4jv5gn3pd4056190.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.advancedchess",
+            "certificate_hash": "d10b0a891a1552ee07de6c3e2792ceee0a81f837"
+          }
+        },
+        {
+          "client_id": "113235320266-a8v9q3dk3si55rjchh1osatuva05e96a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.advancedchess",
+            "certificate_hash": "0b47d715dae24e7756dff9838c273e312a0e95b6"
+          }
+        },
+        {
+          "client_id": "113235320266-su1i0t3rfgus7ftkc95nanitbf6gl8q6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDzYCRfug8djoR9rB9oo2gTT1cNz90hOP0"
@@ -59,7 +100,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "113235320266-su1i0t3rfgus7ftkc95nanitbf6gl8q6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

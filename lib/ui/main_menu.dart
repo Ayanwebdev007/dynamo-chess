@@ -36,7 +36,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   final OnlineService _onlineService = OnlineService();
   static final Set<String> _seenInviteIds = {};
   List<Map<String, dynamic>> _pendingInvites = [];
-
+  
   @override
   void initState() {
     super.initState();
@@ -136,8 +136,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E0A),
-      body: Stack(
-        children: [
+      body: _buildResponsiveLayout(),
+    );
+  }
+
+  Widget _buildResponsiveLayout() {
+    return Stack(
+      children: [
           // Background Animation
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 0, end: 1),
@@ -198,8 +203,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildDesktopDashboard(BoxConstraints constraints) {

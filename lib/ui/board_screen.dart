@@ -53,6 +53,10 @@ class _BoardScreenState extends State<BoardScreen> {
   bool _hasNewMessages = false;
   String? _lastChatMessage;
   Timer? _messageClearTimer;
+  bool _showGameOverOverlay = false;
+  String? _whitePlayerId;
+  String? _blackPlayerId;
+  Timer? _invitationTimeoutTimer;
   final AuthService _auth = AuthService();
   String? _firebaseGameStatus; // Track Firebase game status ('waiting', 'playing', etc.)
   bool _isAiThinking = false;
@@ -250,10 +254,20 @@ class _BoardScreenState extends State<BoardScreen> {
         if (data['blackPlayerName'] != null && data['blackPlayerName'] != '') {
           _blackPlayerName = data['blackPlayerName'];
         }
+        if (data['whitePlayerId'] != null) _whitePlayerId = data['whitePlayerId'];
+        if (data['blackPlayerId'] != null) _blackPlayerId = data['blackPlayerId'];
       });
       
-      if (status == 'aborted') {
-        _showAbortedDialog();
+      // Start/Stop invitation timeout timer
+      if (status == 'waiting') {
+        _startInvitationTimeout();
+      } else {
+        _invitationTimeoutTimer?.cancel();
+        _invitationTimeoutTimer = null;
+      }
+      
+      if (status == 'aborted' || status == 'rejected') {
+        _showAbortedDialog(reason: status == 'rejected' ? "Invitation rejected." : "The opponent has left the game.");
         return;
       }
       
@@ -263,6 +277,11 @@ class _BoardScreenState extends State<BoardScreen> {
         setState(() {
           _gameState.status = GameStatus.whiteWon;
           _gameState.gameResult = method == 'resignation' ? "Black Resigned" : "White Wins!";
+        });
+        
+        // Delay the overlay to let user see the board
+        Future.delayed(const Duration(milliseconds: 2000), () {
+          if (mounted) setState(() => _showGameOverOverlay = true);
         });
         // Record if not already recorded (check if winnerId exists in game data)
         if (data['winnerId'] == null || data['winnerId'] == '') {
@@ -282,6 +301,11 @@ class _BoardScreenState extends State<BoardScreen> {
           _gameState.status = GameStatus.blackWon;
           _gameState.gameResult = method == 'resignation' ? "White Resigned" : "Black Wins!";
         });
+        
+        // Delay the overlay to let user see the board
+        Future.delayed(const Duration(milliseconds: 2000), () {
+          if (mounted) setState(() => _showGameOverOverlay = true);
+        });
         // Record if not already recorded
         if (data['winnerId'] == null || data['winnerId'] == '') {
           widget.onlineService!.recordGameResult(
@@ -298,6 +322,11 @@ class _BoardScreenState extends State<BoardScreen> {
         setState(() {
           _gameState.status = GameStatus.draw;
           _gameState.gameResult = "Draw!";
+        });
+        
+        // Delay the overlay to let user see the board
+        Future.delayed(const Duration(milliseconds: 2000), () {
+          if (mounted) setState(() => _showGameOverOverlay = true);
         });
         // Record draw
         if (data['winnerId'] == null) {  // Draws have no winnerId
@@ -371,18 +400,63 @@ class _BoardScreenState extends State<BoardScreen> {
     });
   }
 
+  void _startInvitationTimeout() {
+    _invitationTimeoutTimer?.cancel();
+    _invitationTimeoutTimer = Timer(const Duration(seconds: 60), () {
+      if (mounted && _firebaseGameStatus == 'waiting') {
+        _cancelInvitation(reason: "Challenge expired (No response).");
+      }
+    });
+  }
+
+  void _cancelInvitation({String? reason}) {
+    if (widget.onlineRoomId != null) {
+      widget.onlineService?.leaveGame(widget.onlineRoomId!);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(reason ?? "Challenge cancelled.")),
+    );
+    Navigator.of(context).pop();
+  }
+
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (widget.onlineRoomId == null && _gameState.status == GameStatus.playing) {
          // Local timer logic
          setState(() {
            _gameState.decrementTime(const Duration(seconds: 1));
+           
+           // Check if time ran out
+           if (_gameState.status != GameStatus.playing) {
+             _checkAndRecordOfflineGameOver();
+             Future.delayed(const Duration(milliseconds: 2000), () {
+               if (mounted) setState(() => _showGameOverOverlay = true);
+             });
+           }
          });
       } else if (widget.onlineRoomId != null) {
         // Online timer: only decrement if Firebase status is 'playing' (not 'waiting')
          if (_gameState.status == GameStatus.playing && _firebaseGameStatus == 'playing') {
              setState(() {
                _gameState.decrementTime(const Duration(seconds: 1));
+               
+               // Check if time ran out locally
+               if (_gameState.status != GameStatus.playing) {
+                 // Tell Firebase time is up
+                 final winnerId = _gameState.status == GameStatus.whiteWon ? _whitePlayerId : _blackPlayerId;
+                 final winnerStatus = _gameState.status == GameStatus.whiteWon ? 'white_won' : 'black_won';
+                 
+                 widget.onlineService!.recordGameResult(
+                   widget.onlineRoomId!, 
+                   winnerId, 
+                   winnerStatus, 
+                   'timeout'
+                 );
+                 
+                 Future.delayed(const Duration(milliseconds: 2000), () {
+                   if (mounted) setState(() => _showGameOverOverlay = true);
+                 });
+               }
              });
          }
       }
@@ -442,6 +516,11 @@ class _BoardScreenState extends State<BoardScreen> {
           // Check for Game Over in Offline Mode
           if (widget.onlineRoomId == null && _gameState.status != GameStatus.playing) {
             _checkAndRecordOfflineGameOver();
+            
+            // Delay the overlay for local games
+            Future.delayed(const Duration(milliseconds: 2000), () {
+              if (mounted) setState(() => _showGameOverOverlay = true);
+            });
           }
       });
     });
@@ -740,7 +819,7 @@ class _BoardScreenState extends State<BoardScreen> {
               ),
             ),
 
-          if (_gameState.status != GameStatus.playing) _buildGameOverOverlay(),
+          if (_showGameOverOverlay) _buildGameOverOverlay(),
           
           // Waiting overlay when Player A is waiting for Player B to accept invitation
           if (_firebaseGameStatus == 'waiting') _buildWaitingOverlay(),
@@ -1104,6 +1183,21 @@ class _BoardScreenState extends State<BoardScreen> {
                   fontSize: 14,
                 ),
               ),
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: () => _cancelInvitation(),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                child: Text(
+                  'CANCEL CHALLENGE',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -1127,14 +1221,15 @@ class _BoardScreenState extends State<BoardScreen> {
     _hasRecordedResult = true;
   }
 
-  void _showAbortedDialog() {
+  void _showAbortedDialog({String? reason}) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
-        title: Text("Game Aborted", style: GoogleFonts.cinzel(color: Colors.redAccent)),
-        content: Text("The opponent has left the game.", style: GoogleFonts.montserrat(color: Colors.white)),
+        title: Text(reason?.contains("rejected") == true ? "Challenge Rejected" : "Game Aborted", 
+             style: GoogleFonts.cinzel(color: Colors.redAccent)),
+        content: Text(reason ?? "The opponent has left the game.", style: GoogleFonts.montserrat(color: Colors.white)),
         actions: [
           TextButton(
             onPressed: () {
@@ -1179,6 +1274,9 @@ class _BoardScreenState extends State<BoardScreen> {
            : (widget.isWhite ? PlayerColor.white : PlayerColor.black);
 
       _gameState.resign(myColor);
+      
+      // Show overlay immediately for resignation
+      _showGameOverOverlay = true;
       
       if (widget.onlineRoomId != null) {
         // Only update status - stream listener will handle recording
@@ -1453,11 +1551,12 @@ class _BoardScreenState extends State<BoardScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _invitationTimeoutTimer?.cancel();
     _gameSubscription?.cancel();
     _invitationSubscription?.cancel();
     _chatSubscription?.cancel();
     _messageClearTimer?.cancel();
-    if (widget.onlineRoomId != null && _gameState.status == GameStatus.playing) {
+    if (widget.onlineRoomId != null && (_gameState.status == GameStatus.playing || _firebaseGameStatus == 'waiting')) {
        widget.onlineService?.leaveGame(widget.onlineRoomId!);
     }
     super.dispose();

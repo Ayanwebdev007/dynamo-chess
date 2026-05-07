@@ -157,7 +157,10 @@ class OnlineService {
 
   // Make a move
   Future<void> makeMove(String roomId, String fen, PlayerColor nextTurn, int wTime, int bTime, Position from, Position to) async {
-    await _db.child('games').child(roomId).update({
+    final gameRef = _db.child('games').child(roomId);
+    
+    // Record basic move update
+    await gameRef.update({
       'boardState': fen,
       'turn': nextTurn == PlayerColor.white ? 'white' : 'black',
       'whiteTime': wTime,
@@ -167,6 +170,15 @@ class OnlineService {
         'to': {'x': to.x, 'y': to.y}
       },
       'lastMoveTimestamp': ServerValue.timestamp,
+    });
+
+    // Record to move history for replay
+    await gameRef.child('moveHistory').push().set({
+      'fen': fen,
+      'timestamp': ServerValue.timestamp,
+      'from': {'x': from.x, 'y': from.y},
+      'to': {'x': to.x, 'y': to.y},
+      'player': nextTurn == PlayerColor.white ? 'black' : 'white', // The player who just moved
     });
   }
 
@@ -193,6 +205,7 @@ class OnlineService {
       final blackId = gameData['blackPlayerId'];
       final whiteName = gameData['whitePlayerName'] ?? 'Guest';
       final blackName = gameData['blackPlayerName'] ?? 'Guest';
+      final moveHistory = gameData['moveHistory'] ?? {};
       
       // Update game with final result
       await gameRef.update({
@@ -202,12 +215,24 @@ class OnlineService {
         'gameMethod': method,
       });
       
+      // Prepare history record with move history
+      final historyRecord = {
+        'opponent': '', // Will be set per player
+        'opponentId': '',
+        'result': '',
+        'method': method,
+        'myColor': '',
+        'finishedAt': ServerValue.timestamp,
+        'gameId': roomId,
+        'moveHistory': moveHistory, // Save the full DNA of the match
+      };
+
       // Record in both players' history
       if (whiteId != null && whiteId != '') {
-        await _recordPlayerGame(whiteId, roomId, blackId ?? 'ai', blackName == '' ? 'Dynamo AI' : blackName, PlayerColor.white, result, method);
+        await _recordPlayerGame(whiteId, roomId, blackId ?? 'ai', blackName == '' ? 'Dynamo AI' : blackName, PlayerColor.white, result, method, moveHistory: moveHistory);
       }
       if (blackId != null && blackId != '') {
-        await _recordPlayerGame(blackId, roomId, whiteId ?? 'ai', whiteName == '' ? 'Dynamo AI' : whiteName, PlayerColor.black, result, method);
+        await _recordPlayerGame(blackId, roomId, whiteId ?? 'ai', whiteName == '' ? 'Dynamo AI' : whiteName, PlayerColor.black, result, method, moveHistory: moveHistory);
       }
     } catch (e) {
       print('ERROR recording game result: $e');
@@ -221,13 +246,13 @@ class OnlineService {
     
     try {
       final gameId = 'offline_${DateTime.now().millisecondsSinceEpoch}';
-      await _recordPlayerGame(user.uid, gameId, 'offline_opp', opponentName, myColor, result, method);
+      await _recordPlayerGame(user.uid, gameId, 'offline_opp', opponentName, myColor, result, method, moveHistory: {}); // TODO: Pass moves for offline too
     } catch (e) {
       print('ERROR recording offline game: $e');
     }
   }
 
-  Future<void> _recordPlayerGame(String playerId, String gameId, String opponentId, String opponentName, PlayerColor myColor, String gameResult, String method) async {
+  Future<void> _recordPlayerGame(String playerId, String gameId, String opponentId, String opponentName, PlayerColor myColor, String gameResult, String method, {Map<dynamic, dynamic>? moveHistory}) async {
     try {
       print('=== RECORDING PLAYER GAME ===');
       print('PlayerId: $playerId');
@@ -277,6 +302,7 @@ class OnlineService {
         'method': method,
         'opponentRating': opponentRating,
         'finishedAt': ServerValue.timestamp,
+        'moveHistory': moveHistory ?? {},
       };
       print('History data: $historyData');
       
@@ -399,6 +425,7 @@ class OnlineService {
           'result': game['result'] ?? 'draw',
           'method': game['method'] ?? 'checkmate',
           'finishedAt': game['finishedAt'] ?? 0,
+          'moveHistory': game['moveHistory'], // Include the tactical DNA
         });
       });
       
@@ -691,6 +718,39 @@ class OnlineService {
     } catch (e) {
       print('ERROR saving FCM token: $e');
     }
+  }
+
+  // --- GLOBAL BROADCAST SYSTEM ---
+
+  /// Send a message to all online users
+  Future<void> sendGlobalBroadcast(String message, String adminName) async {
+    final broadcastRef = _db.child('broadcasts').push();
+    await broadcastRef.set({
+      'message': message,
+      'admin': adminName,
+      'timestamp': ServerValue.timestamp,
+      'expiresAt': DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch,
+    });
+  }
+
+  /// Listen for recent broadcasts
+  Stream<Map<String, dynamic>?> listenForGlobalBroadcasts() {
+    return _db.child('broadcasts').orderByChild('timestamp').limitToLast(1).onValue.map((event) {
+      if (event.snapshot.value == null) return null;
+      
+      final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+      final key = data.keys.first;
+      final broadcast = Map<String, dynamic>.from(data[key] as Map);
+      
+      // Check if it's expired
+      final expiresAt = broadcast['expiresAt'] as int?;
+      if (expiresAt != null && DateTime.now().millisecondsSinceEpoch > expiresAt) {
+        return null;
+      }
+      
+      broadcast['id'] = key;
+      return broadcast;
+    });
   }
 }
 

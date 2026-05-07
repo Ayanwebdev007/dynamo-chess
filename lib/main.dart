@@ -6,6 +6,8 @@ import 'ui/main_menu.dart';
 import 'core/audio_service.dart';
 import 'core/settings_controller.dart';
 import 'core/notification_service.dart';
+import 'ui/admin/admin_dashboard.dart';
+import 'ui/admin/admin_login.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -20,7 +22,6 @@ void main() async {
   
   debugPrint('🚀 Starting Dynamo Chess...');
 
-  // 1. Initialize settings with error handling
   try {
     await SettingsController().init();
     debugPrint('✅ Settings initialized');
@@ -28,7 +29,6 @@ void main() async {
     debugPrint('❌ Settings init failed: $e');
   }
   
-  // 2. Initialize audio
   try {
     AudioService().init();
     NotificationService().init();
@@ -37,7 +37,6 @@ void main() async {
     debugPrint('❌ Audio service init failed: $e');
   }
   
-  // 3. Initialize Firebase
   try {
     debugPrint('🔥 Initializing Firebase...');
     await Firebase.initializeApp(
@@ -46,7 +45,6 @@ void main() async {
     debugPrint('✅ Firebase initialized');
   } catch (e) {
     debugPrint('❌ Firebase init failed: $e');
-    // Continue anyway - app has offline mode
   }
   
   runApp(const DynamoChessApp());
@@ -66,7 +64,31 @@ class DynamoChessApp extends StatelessWidget {
         primaryColor: const Color(0xFFD4AF37),
         useMaterial3: true,
       ),
-      home: const MainMenuScreen(),
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        final name = settings.name ?? '/';
+        
+        // Handle Admin Sub-routes
+        if (name == '/admin/login') {
+          return MaterialPageRoute(builder: (context) => const AdminLoginScreen());
+        }
+        
+        if (name.startsWith('/admin')) {
+          AdminTab tab = AdminTab.overview;
+          if (name == '/admin/users') tab = AdminTab.users;
+          if (name == '/admin/games') tab = AdminTab.games;
+          if (name == '/admin/analytics') tab = AdminTab.analytics;
+          if (name == '/admin/settings') tab = AdminTab.settings;
+          
+          return MaterialPageRoute(
+            builder: (context) => AdminDashboardScreen(initialTab: tab),
+            settings: settings,
+          );
+        }
+        
+        // Default to Main Menu
+        return MaterialPageRoute(builder: (context) => const MainMenuScreen());
+      },
     );
   }
 }

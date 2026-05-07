@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/online_service.dart';
 import 'auth/login_screen.dart';
+import 'game_review_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -547,9 +548,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
         actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.push(
+                context, 
+                MaterialPageRoute(
+                  builder: (context) => GameReviewScreen(
+                    gameData: game, 
+                    opponentName: opponent, 
+                    myColor: color
+                  )
+                )
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('MATCH REVIEW', style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('CLOSE', style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+            child: Text('CLOSE', style: GoogleFonts.montserrat(color: Colors.white54, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

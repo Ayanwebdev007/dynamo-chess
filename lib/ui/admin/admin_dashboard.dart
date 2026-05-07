@@ -1,0 +1,718 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/online_service.dart';
+import '../platform_asset_image.dart';
+import '../game_review_screen.dart';
+
+enum AdminTab { overview, users, games, analytics, settings }
+
+class AdminDashboardScreen extends StatefulWidget {
+  final AdminTab initialTab;
+  const AdminDashboardScreen({super.key, this.initialTab = AdminTab.overview});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  final OnlineService _onlineService = OnlineService();
+  late AdminTab _currentTab;
+  bool _isLoading = true;
+  
+  // Data
+  int _totalUsers = 0;
+  int _activeGames = 0;
+  List<Map<dynamic, dynamic>> _liveGames = [];
+  List<Map<dynamic, dynamic>> _allUsers = [];
+  
+  // Selected User Details
+  Map<dynamic, dynamic>? _selectedUser;
+  List<Map<String, dynamic>> _userGameHistory = [];
+  bool _isFetchingUserHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentTab = widget.initialTab;
+    if (!kIsWeb) {
+      Future.delayed(Duration.zero, () {
+        if (mounted) Navigator.of(context).pop();
+      });
+    } else {
+      _checkLoginStatus();
+    }
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('isAdminLoggedIn') ?? false)) {
+      if (mounted) Navigator.of(context).pushReplacementNamed('/admin/login');
+    } else {
+      setState(() => _isLoading = false);
+      _fetchAdminData();
+    }
+  }
+
+  Future<void> _fetchAdminData() async {
+    final db = FirebaseDatabase.instance.ref();
+    
+    db.child('users').onValue.listen((event) {
+      if (event.snapshot.value != null) {
+        final usersMap = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        if (mounted) {
+          setState(() {
+            _totalUsers = usersMap.length;
+            _allUsers = usersMap.entries.map((e) => {
+              'uid': e.key, 
+              ...Map<dynamic, dynamic>.from(e.value)
+            }).toList();
+          });
+        }
+      }
+    });
+
+    db.child('games').onValue.listen((event) {
+      if (event.snapshot.value != null) {
+        final gamesMap = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final twentyMinutes = 20 * 60 * 1000;
+        
+        final live = gamesMap.entries
+            .where((e) {
+              final data = Map<dynamic, dynamic>.from(e.value as Map);
+              
+              // AUTO-CLEANUP LOGIC:
+              // If a game is 'waiting' and older than 20 minutes, mark it as 'aborted'
+              if (data['status'] == 'waiting' && data['createdAt'] != null) {
+                final createdAt = data['createdAt'] as int;
+                if (now - createdAt > twentyMinutes) {
+                  db.child('games').child(e.key).update({'status': 'aborted'});
+                  return false;
+                }
+              }
+
+              // Only show games that are ACTIVELY being played by two identified players
+              return data['status'] == 'playing' && 
+                     data['whitePlayerName'] != null && data['whitePlayerName'] != '' &&
+                     data['blackPlayerName'] != null && data['blackPlayerName'] != '';
+            })
+            .map((e) => {'id': e.key, ...Map<dynamic, dynamic>.from(e.value)})
+            .toList();
+        
+        if (mounted) {
+          setState(() {
+            _activeGames = live.length;
+            _liveGames = live;
+          });
+        }
+      } else {
+        if (mounted) setState(() { _activeGames = 0; _liveGames = []; });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0E0A),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white38),
+          onPressed: () => Navigator.of(context).pushReplacementNamed('/'),
+        ),
+        title: Text(
+          "DYNAMO COMMAND CENTER",
+          style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, letterSpacing: 2.0),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white38),
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('isAdminLoggedIn', false);
+              if (mounted) Navigator.of(context).pushReplacementNamed('/admin/login');
+            },
+          ),
+          const SizedBox(width: 16),
+        ],
+      ),
+      body: Row(
+        children: [
+          _buildSidebar(),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _buildCurrentView(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentView() {
+    if (_selectedUser != null) {
+      return _buildUserDetailsView();
+    }
+    
+    switch (_currentTab) {
+      case AdminTab.overview:
+        return _buildOverview();
+      case AdminTab.users:
+        return _buildUsersView();
+      case AdminTab.games:
+        return _buildGamesView();
+      default:
+        return const Center(child: Text("Section under construction", style: TextStyle(color: Colors.white24)));
+    }
+  }
+
+  Widget _buildOverview() {
+    return SingleChildScrollView(
+      key: const ValueKey('overview'),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStatsGrid(),
+          const SizedBox(height: 40),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: _buildLiveGamesList()),
+              const SizedBox(width: 32),
+              Expanded(flex: 2, child: _buildRecentUsersList()),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUsersView() {
+    return SingleChildScrollView(
+      key: const ValueKey('users'),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("COMMANDER REGISTRY", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 32),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, color: Colors.white38),
+                      const SizedBox(width: 16),
+                      Text("Search commanders...", style: GoogleFonts.montserrat(color: Colors.white24)),
+                      const Spacer(),
+                      const Icon(Icons.filter_list, color: Colors.white38),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: Colors.white12),
+                ..._allUsers.map((user) => _buildUserRow(user)),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGamesView() {
+    return SingleChildScrollView(
+      key: const ValueKey('games'),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("LIVE BATTLE OPERATIONS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 32),
+          _buildLiveGamesList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserRow(Map<dynamic, dynamic> user) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+            child: Text(user['displayName']?.substring(0, 1).toUpperCase() ?? "U", 
+              style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user['displayName'] ?? "Unknown Commander", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(user['email'] ?? "No email recorded", style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Text("Rating: ${user['stats']?['rating'] ?? 1200}", style: const TextStyle(color: Colors.white70)),
+          ),
+          Expanded(
+            child: Text("Games: ${user['stats']?['totalGames'] ?? 0}", style: const TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            onPressed: () => _viewUserDetails(user),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+              foregroundColor: const Color(0xFFD4AF37),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("INSPECT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 12),
+          IconButton(icon: const Icon(Icons.more_vert, color: Colors.white38), onPressed: () {}),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _viewUserDetails(Map<dynamic, dynamic> user) async {
+    setState(() {
+      _selectedUser = user;
+      _userGameHistory = [];
+      _isFetchingUserHistory = true;
+    });
+    
+    final db = FirebaseDatabase.instance.ref();
+    try {
+      final snapshot = await db.child('gameHistory').child(user['uid']).get();
+      
+      if (snapshot.exists && snapshot.value != null) {
+        final historyMap = Map<dynamic, dynamic>.from(snapshot.value as Map);
+        final history = historyMap.entries.map((e) => Map<String, dynamic>.from(e.value as Map)).toList();
+        // Sort by date descending
+        history.sort((a, b) => ((b['finishedAt'] ?? 0) as int).compareTo((a['finishedAt'] ?? 0) as int));
+        
+        if (mounted) {
+          setState(() {
+            _userGameHistory = history;
+            _isFetchingUserHistory = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isFetchingUserHistory = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isFetchingUserHistory = false);
+    }
+  }
+
+  Widget _buildUserDetailsView() {
+    final user = _selectedUser!;
+    return SingleChildScrollView(
+      key: const ValueKey('user_details'),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFFD4AF37)),
+                onPressed: () => setState(() => _selectedUser = null),
+              ),
+              const SizedBox(width: 16),
+              Text("PERSONNEL FILE: ${user['displayName']?.toUpperCase()}", 
+                style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Basic Info Card
+              Expanded(
+                flex: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: CircleAvatar(
+                          radius: 50,
+                          backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+                          child: Text(user['displayName']?.substring(0, 1).toUpperCase() ?? "U", 
+                            style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 32, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _buildInfoRow("Commander Name", user['displayName'] ?? "Unknown"),
+                      _buildInfoRow("Email Address", user['email'] ?? "N/A"),
+                      _buildInfoRow("Unique ID", user['uid'] ?? "N/A"),
+                      _buildInfoRow("Account Created", "Realtime Data"),
+                      const Divider(height: 40, color: Colors.white12),
+                      Text("AGGREGATE STATS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 14, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 20),
+                      _buildStatDetailRow("Global Rating", "${user['stats']?['rating'] ?? 1200}"),
+                      _buildStatDetailRow("Battles Won", "${user['stats']?['wins'] ?? 0}"),
+                      _buildStatDetailRow("Battles Lost", "${user['stats']?['losses'] ?? 0}"),
+                      _buildStatDetailRow("Total Deployments", "${user['stats']?['totalGames'] ?? 0}"),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 32),
+              // Game History Card
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("BATTLE HISTORY", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 24),
+                      if (_isFetchingUserHistory)
+                        const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
+                      else if (_userGameHistory.isEmpty)
+                        const Center(child: Padding(padding: EdgeInsets.all(40), child: Text("No battle records found for this commander", style: TextStyle(color: Colors.white24))))
+                      else
+                        _buildHistoryTable(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(value, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTable() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(flex: 2, child: Text("DATE", style: _headerStyle())),
+            Expanded(flex: 3, child: Text("OPPONENT", style: _headerStyle())),
+            Expanded(child: Text("COLOR", style: _headerStyle())),
+            Expanded(child: Text("RESULT", style: _headerStyle())),
+            Expanded(flex: 2, child: Text("METHOD", style: _headerStyle())),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Divider(color: Colors.white12),
+        ..._userGameHistory.map((game) => _buildHistoryRow(game)),
+      ],
+    );
+  }
+
+  TextStyle _headerStyle() => GoogleFonts.montserrat(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold);
+
+  Widget _buildHistoryRow(Map<String, dynamic> game) {
+    final date = DateTime.fromMillisecondsSinceEpoch(game['finishedAt'] ?? 0);
+    final formattedDate = "${date.day}/${date.month}/${date.year}";
+    final result = game['result'] ?? 'unknown';
+    final resultColor = result == 'win' ? Colors.greenAccent : (result == 'loss' ? Colors.redAccent : Colors.white54);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: Text(formattedDate, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+          Expanded(
+            flex: 3, 
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(game['opponent'] ?? "Dynamo AI", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(game['opponentId'] ?? "", style: const TextStyle(color: Colors.white24, fontSize: 9)),
+              ],
+            )
+          ),
+          Expanded(child: Text(game['myColor']?.toUpperCase() ?? "", style: const TextStyle(color: Colors.white54, fontSize: 11))),
+          Expanded(child: Text(result.toUpperCase(), style: TextStyle(color: resultColor, fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 2, child: Text(game['method']?.toUpperCase() ?? "", style: const TextStyle(color: Colors.white38, fontSize: 11))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context, 
+                MaterialPageRoute(
+                  builder: (context) => GameReviewScreen(
+                    gameData: game, 
+                    opponentName: game['opponent'] ?? "Unknown", 
+                    myColor: game['myColor'] ?? "white"
+                  )
+                )
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+              foregroundColor: const Color(0xFFD4AF37),
+              minimumSize: const Size(60, 30),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("REVIEW", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 280,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.02),
+        border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          const PlatformAssetImage(assetPath: 'assets/dynamo_logo.png', viewType: 'dynamo_logo', width: 80, height: 80),
+          const SizedBox(height: 24),
+          _buildSidebarItem(Icons.dashboard_outlined, "Overview", _currentTab == AdminTab.overview, () => setState(() => _currentTab = AdminTab.overview)),
+          _buildSidebarItem(Icons.people_outline, "Users", _currentTab == AdminTab.users, () => setState(() => _currentTab = AdminTab.users)),
+          _buildSidebarItem(Icons.sports_esports_outlined, "Games", _currentTab == AdminTab.games, () => setState(() => _currentTab = AdminTab.games)),
+          _buildSidebarItem(Icons.analytics_outlined, "Analytics", _currentTab == AdminTab.analytics, () => setState(() => _currentTab = AdminTab.analytics)),
+          _buildSidebarItem(Icons.settings_outlined, "System Config", _currentTab == AdminTab.settings, () => setState(() => _currentTab = AdminTab.settings)),
+          const Spacer(),
+          _buildSidebarItem(Icons.logout, "Exit Panel", false, () => Navigator.of(context).pushReplacementNamed('/')),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem(IconData icon, String label, bool isSelected, VoidCallback? onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.1) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: isSelected ? const Color(0xFFD4AF37) : Colors.white38, size: 20),
+              const SizedBox(width: 16),
+              Text(
+                label,
+                style: GoogleFonts.montserrat(
+                  color: isSelected ? Colors.white : Colors.white38,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsGrid() {
+    return Row(
+      children: [
+        _buildStatCard("TOTAL COMMANDERS", _totalUsers.toString(), Icons.people, Colors.blueAccent),
+        const SizedBox(width: 24),
+        _buildStatCard("ACTIVE BATTLES", _activeGames.toString(), Icons.sports_esports, const Color(0xFFD4AF37)),
+        const SizedBox(width: 24),
+        _buildStatCard("SERVER LATENCY", "24ms", Icons.speed, Colors.greenAccent),
+        const SizedBox(width: 24),
+        _buildStatCard("UPTIME", "99.9%", Icons.cloud_done, Colors.purpleAccent),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(label, style: GoogleFonts.montserrat(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                Icon(icon, color: color.withOpacity(0.5), size: 16),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(value, style: GoogleFonts.montserrat(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLiveGamesList() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("LIVE BATTLES", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          if (_liveGames.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No active games", style: TextStyle(color: Colors.white24)))),
+          ..._liveGames.take(10).map((game) => _buildGameTile(game)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGameTile(Map<dynamic, dynamic> game) {
+    final whiteName = game['whitePlayerName'] ?? 'Unknown';
+    final blackName = (game['blackPlayerName'] == null || game['blackPlayerName'] == '') ? 'Waiting...' : game['blackPlayerName'];
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            const CircleAvatar(backgroundColor: Colors.white12, radius: 16, child: Icon(Icons.play_arrow, size: 16, color: Color(0xFFD4AF37))),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("$whiteName vs $blackName", 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text("Room ID: ${game['id']} • Status: ${game['status']}", style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.remove_red_eye_outlined, color: Colors.white38, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecentUsersList() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("RECENT COMMANDERS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          ..._allUsers.take(8).map((user) => _buildUserSmallTile(user)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserSmallTile(Map<dynamic, dynamic> user) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+            radius: 18,
+            child: Text(user['displayName']?.substring(0, 1).toUpperCase() ?? "U", 
+              style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user['displayName'] ?? "Commander", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(user['email'] ?? "", style: const TextStyle(color: Colors.white24, fontSize: 10)),
+              ],
+            ),
+          ),
+          if (user['isAdmin'] == true)
+            const Icon(Icons.verified, color: Color(0xFFD4AF37), size: 14),
+        ],
+      ),
+    );
+  }
+}
