@@ -26,6 +26,7 @@ class PlatformAssetImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
+      alignment: Alignment.center,
       errorBuilder: (context, error, stackTrace) {
         return const Icon(Icons.error, color: Colors.red);
       },

@@ -239,6 +239,19 @@ class OnlineService {
     }
   }
 
+  /// Abort a game (Admin tool)
+  Future<void> abortGame(String roomId) async {
+    try {
+      await _db.child('games').child(roomId).update({
+        'status': 'aborted',
+        'finishedAt': ServerValue.timestamp,
+        'gameMethod': 'aborted_by_admin',
+      });
+    } catch (e) {
+      print('Error aborting game: $e');
+    }
+  }
+
   // Record an offline or AI game result for the logged-in user
   Future<void> recordOfflineGame(String result, String method, String opponentName, PlayerColor myColor) async {
     final user = FirebaseAuth.instance.currentUser;

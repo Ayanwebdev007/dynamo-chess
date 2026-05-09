@@ -17,6 +17,9 @@ import 'settings_screen.dart';
 import 'invitation_dialog.dart';
 import '../core/notification_service.dart';
 import '../core/audio_service.dart';
+import 'ruleset_screen.dart';
+import 'tournament_list_screen.dart';
+
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -187,7 +190,17 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildProfileAvatar(),
+                  Row(
+                    children: [
+                      _buildProfileAvatar(),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.help_outline, color: Color(0xFFD4AF37), size: 28),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RulesetScreen())),
+                        tooltip: "How to Play / Rules",
+                      ),
+                    ],
+                  ),
                   Row(
                     children: [
                       _buildNotificationBell(),
@@ -291,15 +304,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       children: [
                         _buildSectionHeader("SELECT MISSION"),
                         const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            Expanded(child: _buildGlassModeButton("PLAY OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false))),
-                            const SizedBox(width: 16),
-                            Expanded(child: _buildGlassModeButton("PLAY WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true))),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildGlassModeButton(
+                         _buildGlassModeButton(
                           _currentUser == null ? "LOGIN TO PLAY ONLINE" : "PLAY ONLINE", 
                           Icons.public, 
                           false, 
@@ -311,7 +316,23 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             }
                           }
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildGlassModeButton("PLAY OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false))),
+                            const SizedBox(width: 16),
+                            Expanded(child: _buildGlassModeButton("PLAY WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true))),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _buildGlassModeButton(
+                          "DYNAMO TOURNAMENT", 
+                          Icons.emoji_events_outlined, 
+                          false, 
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()))
+                        ),
                         const SizedBox(height: 48),
+
                         _buildSectionHeader("TIME CONTROL"),
                         const SizedBox(height: 24),
                         Wrap(
@@ -388,18 +409,47 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               const SizedBox(height: 60),
               _buildSectionHeader("SELECT MISSION"),
               const SizedBox(height: 16),
-              _buildGlassModeButton("PLAY OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false)),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildGlassModeButton(
+                      _currentUser == null ? "ONLINE" : "PLAY ONLINE", 
+                      Icons.public, 
+                      false, 
+                      () {
+                        if (_currentUser == null) {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                        } else {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const OnlineMenuScreen()));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildGlassModeButton("OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false)),
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
-              _buildGlassModeButton("PLAY WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true)),
-              const SizedBox(height: 12),
-              _buildGlassModeButton(_currentUser == null ? "LOGIN TO PLAY ONLINE" : "PLAY ONLINE", Icons.public, false, () {
-                if (_currentUser == null) {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-                } else {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const OnlineMenuScreen()));
-                }
-              }),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildGlassModeButton("WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildGlassModeButton(
+                      "TOURNAMENTS", 
+                      Icons.emoji_events_outlined, 
+                      false, 
+                      () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()))
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 40),
+
               _buildSectionHeader("TIME CONTROL"),
               const SizedBox(height: 16),
               Wrap(

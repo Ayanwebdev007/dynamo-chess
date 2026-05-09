@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/online_service.dart';
 import '../platform_asset_image.dart';
 import '../game_review_screen.dart';
+import '../../core/tournament_service.dart';
+import '../../core/tournament_models.dart';
 
-enum AdminTab { overview, users, games, analytics, settings }
+enum AdminTab { overview, users, games, tournaments, analytics, settings }
 
 class AdminDashboardScreen extends StatefulWidget {
   final AdminTab initialTab;
@@ -19,6 +21,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final OnlineService _onlineService = OnlineService();
+  final TournamentService _tournamentService = TournamentService();
   late AdminTab _currentTab;
   bool _isLoading = true;
   
@@ -171,6 +174,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _buildUsersView();
       case AdminTab.games:
         return _buildGamesView();
+      case AdminTab.tournaments:
+        return _buildTournamentsView();
       default:
         return const Center(child: Text("Section under construction", style: TextStyle(color: Colors.white24)));
     }
@@ -534,6 +539,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _buildSidebarItem(Icons.dashboard_outlined, "Overview", _currentTab == AdminTab.overview, () => setState(() => _currentTab = AdminTab.overview)),
           _buildSidebarItem(Icons.people_outline, "Users", _currentTab == AdminTab.users, () => setState(() => _currentTab = AdminTab.users)),
           _buildSidebarItem(Icons.sports_esports_outlined, "Games", _currentTab == AdminTab.games, () => setState(() => _currentTab = AdminTab.games)),
+          _buildSidebarItem(Icons.emoji_events_outlined, "Tournaments", _currentTab == AdminTab.tournaments, () => setState(() => _currentTab = AdminTab.tournaments)),
           _buildSidebarItem(Icons.analytics_outlined, "Analytics", _currentTab == AdminTab.analytics, () => setState(() => _currentTab = AdminTab.analytics)),
           _buildSidebarItem(Icons.settings_outlined, "System Config", _currentTab == AdminTab.settings, () => setState(() => _currentTab = AdminTab.settings)),
           const Spacer(),
@@ -663,8 +669,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
             const Icon(Icons.remove_red_eye_outlined, color: Colors.white38, size: 18),
+            const SizedBox(width: 12),
+            IconButton(
+              icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
+              tooltip: 'TERMINATE BATTLE',
+              onPressed: () => _showTerminateGameDialog(game['id']),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showTerminateGameDialog(String roomId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text("TERMINATE BATTLE?"),
+        content: Text("Are you sure you want to force abort room $roomId? This will clear it from active matches."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          ElevatedButton(
+            onPressed: () async {
+              await _onlineService.abortGame(roomId);
+              if (mounted) Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text("TERMINATE"),
+          ),
+        ],
       ),
     );
   }
@@ -711,6 +745,275 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           if (user['isAdmin'] == true)
             const Icon(Icons.verified, color: Color(0xFFD4AF37), size: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTournamentsView() {
+    return StreamBuilder<List<Tournament>>(
+      stream: _tournamentService.streamTournaments(),
+      builder: (context, snapshot) {
+        final tournaments = snapshot.data ?? [];
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("TOURNAMENT OPERATIONS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+                  ElevatedButton.icon(
+                    onPressed: _showCreateTournamentDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text("CREATE OPERATION"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4AF37),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              if (tournaments.isEmpty)
+                _buildEmptyTournamentsState()
+              else
+                ...tournaments.map((t) => _buildAdminTournamentCard(t)),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildEmptyTournamentsState() {
+    return Center(
+      child: Column(
+        children: [
+          const SizedBox(height: 100),
+          Icon(Icons.emoji_events_outlined, size: 80, color: Colors.white.withOpacity(0.05)),
+          const SizedBox(height: 24),
+          Text("NO ACTIVE OPERATIONS", style: GoogleFonts.cinzel(color: Colors.white24, fontSize: 18)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminTournamentCard(Tournament t) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text("ID: ${t.id} • Status: ${t.status.name.toUpperCase()}", style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                ],
+              ),
+              const Spacer(),
+              _buildTournamentStatusBadge(t.status),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              _buildStatDetailRow("Participants", "${t.participants.length}"),
+              const SizedBox(width: 32),
+              _buildStatDetailRow("Current Round", "${t.currentRound} / ${t.totalRounds}"),
+              const SizedBox(width: 32),
+              _buildStatDetailRow("Prize Pool", "${t.prizePool} GOLD"),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              if (t.status == TournamentStatus.enrolling)
+                ElevatedButton(
+                  onPressed: () => _tournamentService.pairNextRound(t.id),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.1), foregroundColor: Colors.green),
+                  child: const Text("START TOURNAMENT (ROUND 1)"),
+                ),
+              if (t.status == TournamentStatus.active)
+                ElevatedButton(
+                  onPressed: () => _tournamentService.pairNextRound(t.id),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1), foregroundColor: const Color(0xFFD4AF37)),
+                  child: const Text("PAIR NEXT ROUND"),
+                ),
+              const SizedBox(width: 12),
+              OutlinedButton(
+                onPressed: () => _showDeleteTournamentDialog(t),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+                child: const Text("DELETE"),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTournamentStatusBadge(TournamentStatus status) {
+    Color color = Colors.blueAccent;
+    if (status == TournamentStatus.active) color = Colors.orangeAccent;
+    if (status == TournamentStatus.completed) color = Colors.greenAccent;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(status.name.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  void _showCreateTournamentDialog() {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    final roundsController = TextEditingController(text: "3");
+    final prizeController = TextEditingController(text: "1000");
+    final timeController = TextEditingController(text: "180");
+    final autoStartController = TextEditingController(text: "2");
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text("DEPLOY NEW OPERATION", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37))),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAdminTextField(titleController, "Operation Title", "e.g. Dynamo Elite Cup"),
+              _buildAdminTextField(descController, "Mission Objective", "Brief description of the tournament", maxLines: 3),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Total Rounds", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.02),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.auto_awesome, size: 14, color: Color(0xFFD4AF37)),
+                              const SizedBox(width: 8),
+                              Text("AUTO-CALC", style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildAdminTextField(prizeController, "Prize Pool", "1000", keyboardType: TextInputType.number)),
+                ],
+              ),
+              _buildAdminTextField(timeController, "Time Limit (Seconds)", "180", keyboardType: TextInputType.number),
+              _buildAdminTextField(autoStartController, "Auto-Start Delay (Minutes)", "2", keyboardType: TextInputType.number),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ABORT")),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final id = "T-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
+                await _tournamentService.createTournament(
+                  id: id,
+                  title: titleController.text,
+                  description: descController.text,
+                  totalRounds: 0, // Will be auto-calculated on start
+                  prizePool: int.tryParse(prizeController.text) ?? 1000,
+                  timeLimitSeconds: int.tryParse(timeController.text) ?? 180,
+                  autoStartAt: DateTime.now().add(Duration(minutes: int.tryParse(autoStartController.text) ?? 2)),
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Operation Deployed Successfully')),
+                  );
+                  Navigator.pop(context);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Deployment Failed: $e'), backgroundColor: Colors.redAccent),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+            child: const Text("DEPLOY"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteTournamentDialog(Tournament t) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text("TERMINATE OPERATION?"),
+        content: Text("Are you sure you want to permanently delete ${t.title}? This action cannot be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          ElevatedButton(
+            onPressed: () async {
+              await _tournamentService.deleteTournament(t.id);
+              if (mounted) Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text("DELETE"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminTextField(TextEditingController controller, String label, String hint, {int maxLines = 1, TextInputType keyboardType = TextInputType.text}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: controller,
+            maxLines: maxLines,
+            keyboardType: keyboardType,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(color: Colors.white10),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
         ],
       ),
     );

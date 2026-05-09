@@ -20,6 +20,7 @@ import 'dart:ui' as ui;
 import 'platform_asset_image.dart';
 import '../core/ai_engine.dart';
 import '../core/settings_controller.dart';
+import '../core/tournament_service.dart';
 
 class BoardScreen extends StatefulWidget {
   final GameSettings settings;
@@ -27,19 +28,23 @@ class BoardScreen extends StatefulWidget {
   final OnlineService? onlineService;
   final bool isWhite; // For online play, determines perspective
   final String? invitationId; // For monitoring invitation status (decline/expiry)
-  final bool isVsComputer;
-  final int aiDifficulty;
+    final bool isVsComputer;
+    final int aiDifficulty;
+    final String? tournamentId;
+    final int? roundNumber;
 
-  const BoardScreen({
-    super.key, 
-    this.settings = GameSettings.blitz3,
-    this.onlineRoomId,
-    this.onlineService,
-    this.isWhite = true,
-    this.invitationId,
-    this.isVsComputer = false,
-    this.aiDifficulty = 2,
-  });
+    const BoardScreen({
+      super.key, 
+      this.settings = GameSettings.blitz3,
+      this.onlineRoomId,
+      this.onlineService,
+      this.isWhite = true,
+      this.invitationId,
+      this.isVsComputer = false,
+      this.aiDifficulty = 2,
+      this.tournamentId,
+      this.roundNumber,
+    });
 
   @override
   State<BoardScreen> createState() => _BoardScreenState();
@@ -281,16 +286,37 @@ class _BoardScreenState extends State<BoardScreen> {
         
         // Delay the overlay to let user see the board
         Future.delayed(const Duration(milliseconds: 2000), () {
-          if (mounted) setState(() => _showGameOverOverlay = true);
+          if (mounted) {
+            setState(() => _showGameOverOverlay = true);
+            if (widget.tournamentId != null) {
+              Future.delayed(const Duration(seconds: 10), () {
+                if (mounted) {
+                  print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
+                  Navigator.of(context).pop();
+                }
+              });
+            }
+          }
         });
         // Record if not already recorded (check if winnerId exists in game data)
         if (data['winnerId'] == null || data['winnerId'] == '') {
+          setState(() => _hasRecordedResult = true);
           widget.onlineService!.recordGameResult(
             widget.onlineRoomId!, 
             data['whitePlayerId'], 
             'white_won', 
             method
           );
+          // NEW: Report to Tournament Service
+          if (widget.tournamentId != null && widget.roundNumber != null) {
+            TournamentService().reportMatchResult(
+              widget.tournamentId!,
+              widget.roundNumber!,
+              widget.onlineRoomId!,
+              1.0, // White Won
+              0.0, // Black Lost
+            );
+          }
         }
         return;
       }
@@ -304,16 +330,37 @@ class _BoardScreenState extends State<BoardScreen> {
         
         // Delay the overlay to let user see the board
         Future.delayed(const Duration(milliseconds: 2000), () {
-          if (mounted) setState(() => _showGameOverOverlay = true);
+          if (mounted) {
+            setState(() => _showGameOverOverlay = true);
+            if (widget.tournamentId != null) {
+              Future.delayed(const Duration(seconds: 10), () {
+                if (mounted) {
+                  print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
+                  Navigator.of(context).pop();
+                }
+              });
+            }
+          }
         });
         // Record if not already recorded
         if (data['winnerId'] == null || data['winnerId'] == '') {
+          setState(() => _hasRecordedResult = true);
           widget.onlineService!.recordGameResult(
             widget.onlineRoomId!, 
             data['blackPlayerId'], 
             'black_won', 
             method
           );
+          // NEW: Report to Tournament Service
+          if (widget.tournamentId != null && widget.roundNumber != null) {
+            TournamentService().reportMatchResult(
+              widget.tournamentId!,
+              widget.roundNumber!,
+              widget.onlineRoomId!,
+              0.0, // White Lost
+              1.0, // Black Won
+            );
+          }
         }
         return;
       }
@@ -326,16 +373,37 @@ class _BoardScreenState extends State<BoardScreen> {
         
         // Delay the overlay to let user see the board
         Future.delayed(const Duration(milliseconds: 2000), () {
-          if (mounted) setState(() => _showGameOverOverlay = true);
+          if (mounted) {
+            setState(() => _showGameOverOverlay = true);
+            if (widget.tournamentId != null) {
+              Future.delayed(const Duration(seconds: 10), () {
+                if (mounted) {
+                  print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
+                  Navigator.of(context).pop();
+                }
+              });
+            }
+          }
         });
         // Record draw
         if (data['winnerId'] == null) {  // Draws have no winnerId
+          setState(() => _hasRecordedResult = true);
           widget.onlineService!.recordGameResult(
             widget.onlineRoomId!, 
             null,  // No winner
             'draw', 
             'agreement'
           );
+          // NEW: Report to Tournament Service
+          if (widget.tournamentId != null && widget.roundNumber != null) {
+            TournamentService().reportMatchResult(
+              widget.tournamentId!,
+              widget.roundNumber!,
+              widget.onlineRoomId!,
+              0.5, // Draw
+              0.5, // Draw
+            );
+          }
         }
         return;
       }
@@ -436,7 +504,7 @@ class _BoardScreenState extends State<BoardScreen> {
          });
       } else if (widget.onlineRoomId != null) {
         // Online timer: only decrement if Firebase status is 'playing' (not 'waiting')
-         if (_gameState.status == GameStatus.playing && _firebaseGameStatus == 'playing') {
+         if (_gameState.status == GameStatus.playing && (_firebaseGameStatus == 'playing' || widget.tournamentId != null)) {
              setState(() {
                _gameState.decrementTime(const Duration(seconds: 1));
                
@@ -513,11 +581,15 @@ class _BoardScreenState extends State<BoardScreen> {
             _triggerAIMove();
           }
           
-          // Check for Game Over in Offline Mode
-          if (widget.onlineRoomId == null && _gameState.status != GameStatus.playing) {
-            _checkAndRecordOfflineGameOver();
+          // Check for Game Over (Now both Offline and Online)
+          if (_gameState.status != GameStatus.playing) {
+            if (widget.onlineRoomId == null) {
+              _checkAndRecordOfflineGameOver();
+            } else {
+               _checkAndRecordOnlineGameOver();
+            }
             
-            // Delay the overlay for local games
+            // Delay the overlay
             Future.delayed(const Duration(milliseconds: 2000), () {
               if (mounted) setState(() => _showGameOverOverlay = true);
             });
@@ -1124,7 +1196,18 @@ class _BoardScreenState extends State<BoardScreen> {
               ),
               const SizedBox(height: 30),
               ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  print('🚀 QUIT: Tapped Quit to Menu. Popping BoardScreen.');
+                  // Ensure we clear any pending state before leaving
+                  _timer?.cancel();
+                  _gameSubscription?.cancel();
+                  _chatSubscription?.cancel();
+                  _invitationSubscription?.cancel();
+                  
+                  // Use popUntil to go back to the previous stable screen (usually tournament or lobby)
+                  // If we are deep in a stack, this ensures we exit the board completely.
+                  Navigator.of(context).pop();
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFD4AF37),
                   foregroundColor: Colors.black,
@@ -1133,6 +1216,13 @@ class _BoardScreenState extends State<BoardScreen> {
                 ),
                 child: Text('QUIT TO MENU', style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
               ),
+              if (widget.tournamentId != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  "RETURNING TO COMMAND CENTER...",
+                  style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                ),
+              ],
             ],
           ),
         ),
@@ -1218,6 +1308,43 @@ class _BoardScreenState extends State<BoardScreen> {
     final myColor = widget.isWhite ? PlayerColor.white : PlayerColor.black;
 
     widget.onlineService?.recordOfflineGame(result, method, opponentName, myColor);
+    _hasRecordedResult = true;
+  }
+
+  void _checkAndRecordOnlineGameOver() {
+    if (_hasRecordedResult || widget.onlineRoomId == null) return;
+    
+    final result = _gameState.status == GameStatus.whiteWon ? 'white_won' : 
+                   (_gameState.status == GameStatus.blackWon ? 'black_won' : 'draw');
+    
+    final method = _gameState.gameResult.contains('Resigned') ? 'resignation' : 
+                   (_gameState.gameResult.contains('time') ? 'timeout' : 'checkmate');
+
+    final winnerId = _gameState.status == GameStatus.whiteWon ? _whitePlayerId : 
+                    (_gameState.status == GameStatus.blackWon ? _blackPlayerId : null);
+
+    // 1. Update Game Node (Triggers stream for opponent)
+    widget.onlineService!.recordGameResult(
+      widget.onlineRoomId!,
+      winnerId,
+      result,
+      method,
+    );
+
+    // 2. Report to Tournament Service if applicable
+    if (widget.tournamentId != null && widget.roundNumber != null) {
+      final whiteScore = result == 'white_won' ? 1.0 : (result == 'draw' ? 0.5 : 0.0);
+      final blackScore = result == 'black_won' ? 1.0 : (result == 'draw' ? 0.5 : 0.0);
+      
+      TournamentService().reportMatchResult(
+        widget.tournamentId!,
+        widget.roundNumber!,
+        widget.onlineRoomId!,
+        whiteScore,
+        blackScore,
+      );
+    }
+    
     _hasRecordedResult = true;
   }
 
