@@ -61,6 +61,27 @@ class TournamentService {
     return [];
   }
 
+  int _toInt(dynamic val, [int defaultValue = 0]) {
+    if (val == null) return defaultValue;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val) ?? defaultValue;
+    return defaultValue;
+  }
+
+  double _toDouble(dynamic val, [double defaultValue = 0.0]) {
+    if (val == null) return defaultValue;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val) ?? defaultValue;
+    return defaultValue;
+  }
+
+  DateTime? _parseDateTime(dynamic val) {
+    if (val == null) return null;
+    final intValue = _toInt(val);
+    if (intValue == 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(intValue);
+  }
+
   /// Stream of all active tournaments
   Stream<List<Tournament>> streamTournaments() {
     print('📡 TOURNAMENT: Listening to live feed...');
@@ -198,9 +219,9 @@ class TournamentService {
           participants.add(TournamentParticipant(
             userId: entry.key.toString(),
             name: v['name']?.toString() ?? 'Unknown',
-            rating: (v['rating'] ?? 1200).toInt(),
-            score: (v['score'] ?? 0).toDouble(),
-            buchholz: (v['buchholz'] ?? 0).toDouble(),
+            rating: _toInt(v['rating'], 1200),
+            score: _toDouble(v['score'], 0.0),
+            buchholz: _toDouble(v['buchholz'], 0.0),
             opponents: _safeList(v['opponents']).map((e) => e.toString()).toList(),
             colors: _safeList(v['colors']).map<PlayerColor>((c) => c.toString() == 'white' ? PlayerColor.white : PlayerColor.black).toList(),
           ));
@@ -231,8 +252,8 @@ class TournamentService {
                   blackPlayerId: m['blackPlayerId']?.toString() ?? '',
                   whitePlayerName: m['whitePlayerName']?.toString() ?? '',
                   blackPlayerName: m['blackPlayerName']?.toString() ?? '',
-                  whiteScore: (m['whiteScore'] ?? 0).toDouble(),
-                  blackScore: (m['blackScore'] ?? 0).toDouble(),
+                  whiteScore: _toDouble(m['whiteScore'], 0.0),
+                  blackScore: _toDouble(m['blackScore'], 0.0),
                   isCompleted: m['isCompleted'] == true,
                 ));
               }
@@ -251,20 +272,20 @@ class TournamentService {
       id: id,
       title: data['title']?.toString() ?? 'Unknown Tournament',
       description: data['description']?.toString() ?? '',
-      totalRounds: (data['totalRounds'] ?? 5).toInt(),
-      currentRound: (data['currentRound'] ?? 0).toInt(),
+      totalRounds: _toInt(data['totalRounds'], 5),
+      currentRound: _toInt(data['currentRound'], 0),
       participants: participants,
       rounds: rounds,
-      prizePool: (data['prizePool'] ?? 0).toInt(),
-      settings: GameSettings(timeLimit: Duration(seconds: (data['timeLimit'] ?? 180).toInt())),
-      autoStartAt: data['autoStartAt'] != null ? DateTime.fromMillisecondsSinceEpoch((data['autoStartAt'] as num).toInt()) : null,
-      scheduledStartAt: data['scheduledStartAt'] != null ? DateTime.fromMillisecondsSinceEpoch((data['scheduledStartAt'] as num).toInt()) : null,
-      nextEventAt: data['nextEventAt'] != null ? DateTime.fromMillisecondsSinceEpoch((data['nextEventAt'] as num).toInt()) : null,
+      prizePool: _toInt(data['prizePool'], 0),
+      settings: GameSettings(timeLimit: Duration(seconds: _toInt(data['timeLimit'], 180))),
+      autoStartAt: _parseDateTime(data['autoStartAt']),
+      scheduledStartAt: _parseDateTime(data['scheduledStartAt']),
+      nextEventAt: _parseDateTime(data['nextEventAt']),
       status: TournamentStatus.values.firstWhere(
         (s) => s.name == (data['status']?.toString() ?? 'enrolling'),
         orElse: () => TournamentStatus.enrolling,
       ),
-      restTimerSetForRound: data['restTimerSetForRound'] != null ? (data['restTimerSetForRound'] as num).toInt() : null,
+      restTimerSetForRound: data['restTimerSetForRound'] != null ? _toInt(data['restTimerSetForRound']) : null,
     );
   }
 

@@ -7,7 +7,6 @@ import '../core/tournament_service.dart';
 import '../core/online_service.dart';
 import '../core/models.dart';
 import 'board_screen.dart';
-import 'dart:ui' as ui;
 
 class TournamentDetailScreen extends StatefulWidget {
   final Tournament tournament;
@@ -30,11 +29,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
     _tabController = TabController(length: 3, vsync: this);
     _tournamentStream = _service.streamTournament(widget.tournament.id);
     
-    _tournamentStream!.listen((t) {
-      if (t != null && mounted) {
-        _handleAutoDeployment(t);
-      }
-    });
+    _tournamentStream!.listen(
+      (t) {
+        if (t != null && mounted) {
+          _handleAutoDeployment(t);
+        }
+      },
+      onError: (error) {
+        debugPrint("❌ TOURNAMENT DETAIL: Error in stream subscription: $error");
+      },
+    );
 
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (mounted) setState(() {});
@@ -112,8 +116,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                     // Use live data if available, otherwise fallback to the data passed from the list
                     final t = snapshot.data ?? widget.tournament;
                     
-                    // Handle potential error only if we have NO data to show
-                    if (snapshot.hasError && snapshot.data == null) {
+                    // Handle potential error
+                    if (snapshot.hasError) {
                        return Center(
                          child: Column(
                            mainAxisAlignment: MainAxisAlignment.center,
@@ -146,18 +150,6 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBackground() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0.5, -0.5),
-          radius: 1.5,
-          colors: [Color(0xFF142B16), Color(0xFF0A0E0A)],
         ),
       ),
     );
