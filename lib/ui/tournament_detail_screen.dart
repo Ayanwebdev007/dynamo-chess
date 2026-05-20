@@ -27,7 +27,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _tournamentStream = _service.streamTournament(widget.tournament.id);
+    _tournamentStream = _service.streamTournament(widget.tournament.id).asBroadcastStream();
     
     _tournamentStream!.listen(
       (t) {
