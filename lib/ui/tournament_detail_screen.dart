@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,6 +22,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   late TabController _tabController;
   Stream<Tournament?>? _tournamentStream;
   String? _lastDeployedMatchId;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -32,6 +34,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
       if (t != null && mounted) {
         _handleAutoDeployment(t);
       }
+    });
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) setState(() {});
     });
   }
 
@@ -75,6 +81,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -155,10 +162,16 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
 
     String message = "";
     DateTime? target;
+    final now = DateTime.now();
 
-    if (t.status == TournamentStatus.enrolling && t.autoStartAt != null) {
-      message = "COMMENCING IN:";
-      target = t.autoStartAt;
+    if (t.status == TournamentStatus.enrolling) {
+      if (t.scheduledStartAt != null && now.isBefore(t.scheduledStartAt!)) {
+        message = "REGISTRATION OPENS IN:";
+        target = t.scheduledStartAt;
+      } else if (t.autoStartAt != null) {
+        message = "REGISTRATION CLOSES IN:";
+        target = t.autoStartAt;
+      }
     } else if (t.status == TournamentStatus.active && t.nextEventAt != null) {
       message = "NEXT ROUND IN:";
       target = t.nextEventAt;
@@ -437,36 +450,117 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
               _buildPlayerInfo(match.blackPlayerName ?? "Unknown", false, match.blackScore, match.isCompleted),
             ],
           ),
-          if (isMyMatch && t.status == TournamentStatus.active && !match.isCompleted) ...[
+          if (!match.isCompleted && t.status == TournamentStatus.active) ...[
             const SizedBox(height: 16),
-            Container(
+            SizedBox(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD4AF37).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFD4AF37)),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    "PREPARING AUTO-DEPLOYMENT...",
-                    style: GoogleFonts.montserrat(
-                      color: const Color(0xFFD4AF37),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
+              child: isMyMatch
+                  ? Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => BoardScreen(
+                                    onlineRoomId: match.id,
+                                    onlineService: OnlineService(),
+                                    isWhite: match.whitePlayerId == currentUserId,
+                                    settings: settings,
+                                    tournamentId: t.id,
+                                    roundNumber: t.currentRound,
+                                    isSpectator: false,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.play_arrow_rounded, color: Colors.black),
+                            label: Text(
+                              "RE-ENTER MATCH",
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                                fontSize: 12,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD4AF37),
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4AF37).withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.15)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 10,
+                                height: 10,
+                                child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFFD4AF37)),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "AUTO-DEPLOYMENT ACTIVE",
+                                style: GoogleFonts.montserrat(
+                                  color: const Color(0xFFD4AF37),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => BoardScreen(
+                              onlineRoomId: match.id,
+                              onlineService: OnlineService(),
+                              isWhite: true,
+                              settings: settings,
+                              tournamentId: t.id,
+                              roundNumber: t.currentRound,
+                              isSpectator: true,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.visibility_outlined, color: Color(0xFFD4AF37)),
+                      label: Text(
+                        "SPECTATE MATCH",
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                          fontSize: 12,
+                          color: const Color(0xFFD4AF37),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.4)),
+                        backgroundColor: Colors.white.withOpacity(0.03),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
                     ),
-                  ),
-                ],
-              ),
             ),
           ],
         ],

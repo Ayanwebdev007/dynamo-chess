@@ -888,85 +888,173 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final prizeController = TextEditingController(text: "1000");
     final timeController = TextEditingController(text: "180");
     final autoStartController = TextEditingController(text: "2");
+    DateTime selectedStartDateTime = DateTime.now().add(const Duration(minutes: 5));
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: Text("DEPLOY NEW OPERATION", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37))),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildAdminTextField(titleController, "Operation Title", "e.g. Dynamo Elite Cup"),
-              _buildAdminTextField(descController, "Mission Objective", "Brief description of the tournament", maxLines: 3),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text("Total Rounds", style: TextStyle(color: Colors.white38, fontSize: 12)),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.02),
-                            borderRadius: BorderRadius.circular(12),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: Text("DEPLOY NEW OPERATION", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37))),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildAdminTextField(titleController, "Operation Title", "e.g. Dynamo Elite Cup"),
+                _buildAdminTextField(descController, "Mission Objective", "Brief description of the tournament", maxLines: 3),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Total Rounds", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.02),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.auto_awesome, size: 14, color: Color(0xFFD4AF37)),
+                                const SizedBox(width: 8),
+                                Text("AUTO-CALC", style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.auto_awesome, size: 14, color: Color(0xFFD4AF37)),
-                              const SizedBox(width: 8),
-                              Text("AUTO-CALC", style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildAdminTextField(prizeController, "Prize Pool", "1000", keyboardType: TextInputType.number)),
-                ],
-              ),
-              _buildAdminTextField(timeController, "Time Limit (Seconds)", "180", keyboardType: TextInputType.number),
-              _buildAdminTextField(autoStartController, "Auto-Start Delay (Minutes)", "2", keyboardType: TextInputType.number),
-            ],
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildAdminTextField(prizeController, "Prize Pool", "1000", keyboardType: TextInputType.number)),
+                  ],
+                ),
+                _buildAdminTextField(timeController, "Time Limit (Seconds)", "180", keyboardType: TextInputType.number),
+                
+                // Scheduled Start Date & Time Picker
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Scheduled Start Date & Time", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final DateTime? pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: selectedStartDateTime,
+                          firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Color(0xFFD4AF37),
+                                  onPrimary: Colors.black,
+                                  surface: Color(0xFF1A1A1A),
+                                  onSurface: Colors.white,
+                                ),
+                                dialogBackgroundColor: const Color(0xFF121212),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (pickedDate != null) {
+                          final TimeOfDay? pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(selectedStartDateTime),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.dark(
+                                    primary: Color(0xFFD4AF37),
+                                    onPrimary: Colors.black,
+                                    surface: Color(0xFF1A1A1A),
+                                    onSurface: Colors.white,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (pickedTime != null) {
+                            setDialogState(() {
+                              selectedStartDateTime = DateTime(
+                                pickedDate.year,
+                                pickedDate.month,
+                                pickedDate.day,
+                                pickedTime.hour,
+                                pickedTime.minute,
+                              );
+                            });
+                          }
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, size: 16, color: Color(0xFFD4AF37)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "${selectedStartDateTime.day.toString().padLeft(2, '0')}/${selectedStartDateTime.month.toString().padLeft(2, '0')}/${selectedStartDateTime.year} ${selectedStartDateTime.hour.toString().padLeft(2, '0')}:${selectedStartDateTime.minute.toString().padLeft(2, '0')}",
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildAdminTextField(autoStartController, "Join Time Limit (Minutes after Start Time)", "2", keyboardType: TextInputType.number),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("ABORT")),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  final id = "T-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
+                  await _tournamentService.createTournament(
+                    id: id,
+                    title: titleController.text,
+                    description: descController.text,
+                    totalRounds: 0, // Will be auto-calculated on start
+                    prizePool: int.tryParse(prizeController.text) ?? 1000,
+                    timeLimitSeconds: int.tryParse(timeController.text) ?? 180,
+                    scheduledStartAt: selectedStartDateTime,
+                    autoStartDelayMinutes: int.tryParse(autoStartController.text) ?? 2,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Operation Deployed Successfully')),
+                    );
+                    Navigator.pop(context);
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Deployment Failed: $e'), backgroundColor: Colors.redAccent),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+              child: const Text("DEPLOY"),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ABORT")),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                final id = "T-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
-                await _tournamentService.createTournament(
-                  id: id,
-                  title: titleController.text,
-                  description: descController.text,
-                  totalRounds: 0, // Will be auto-calculated on start
-                  prizePool: int.tryParse(prizeController.text) ?? 1000,
-                  timeLimitSeconds: int.tryParse(timeController.text) ?? 180,
-                  autoStartAt: DateTime.now().add(Duration(minutes: int.tryParse(autoStartController.text) ?? 2)),
-                );
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Operation Deployed Successfully')),
-                  );
-                  Navigator.pop(context);
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Deployment Failed: $e'), backgroundColor: Colors.redAccent),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-            child: const Text("DEPLOY"),
-          ),
-        ],
       ),
     );
   }

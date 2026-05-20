@@ -89,6 +89,7 @@ class Tournament {
   final GameSettings settings;
   final int prizePool;
   final DateTime? autoStartAt;
+  final DateTime? scheduledStartAt;
   final DateTime? nextEventAt;
   final int? restTimerSetForRound;
 
@@ -105,6 +106,7 @@ class Tournament {
     required this.settings,
     this.prizePool = 0,
     this.autoStartAt,
+    this.scheduledStartAt,
     this.nextEventAt,
     this.restTimerSetForRound,
   });

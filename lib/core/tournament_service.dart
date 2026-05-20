@@ -100,9 +100,14 @@ class TournamentService {
     if (t.status == TournamentStatus.enrolling && t.autoStartAt != null) {
       if (now.isAfter(t.autoStartAt!)) {
         if (t.participants.length < 2) {
-          // Check every 10 seconds to avoid spamming logs
-          if (now.second % 10 == 0) {
-            print('🤖 AUTO: Waiting for participants for ${t.id} (${t.participants.length}/2)');
+          _activeAutomations.add(t.id);
+          try {
+            print('🤖 AUTO: Joining timeout reached with ${t.participants.length} players for ${t.id}. Marking as completed.');
+            await updateTournamentStatus(t.id, TournamentStatus.completed);
+          } catch (e) {
+            print('❌ AUTO ERROR: Auto-complete failed for ${t.id}: $e');
+          } finally {
+            _activeAutomations.remove(t.id);
           }
           return;
         }
@@ -253,6 +258,7 @@ class TournamentService {
       prizePool: (data['prizePool'] ?? 0).toInt(),
       settings: GameSettings(timeLimit: Duration(seconds: (data['timeLimit'] ?? 180).toInt())),
       autoStartAt: data['autoStartAt'] != null ? DateTime.fromMillisecondsSinceEpoch((data['autoStartAt'] as num).toInt()) : null,
+      scheduledStartAt: data['scheduledStartAt'] != null ? DateTime.fromMillisecondsSinceEpoch((data['scheduledStartAt'] as num).toInt()) : null,
       nextEventAt: data['nextEventAt'] != null ? DateTime.fromMillisecondsSinceEpoch((data['nextEventAt'] as num).toInt()) : null,
       status: TournamentStatus.values.firstWhere(
         (s) => s.name == (data['status']?.toString() ?? 'enrolling'),
@@ -266,6 +272,30 @@ class TournamentService {
   Future<void> joinTournament(String tournamentId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception("Must be logged in");
+
+    // Fetch tournament to validate joining deadline
+    final tSnapshot = await _db.child('tournaments').child(tournamentId).get();
+    if (tSnapshot.exists && tSnapshot.value != null) {
+      final tData = _firebaseToMap(tSnapshot.value);
+      if (tData['status'] == 'completed') {
+        throw Exception("Tournament has already completed.");
+      }
+      if (tData['status'] == 'active') {
+        throw Exception("Tournament has already started.");
+      }
+      if (tData['autoStartAt'] != null) {
+        final deadline = DateTime.fromMillisecondsSinceEpoch((tData['autoStartAt'] as num).toInt());
+        if (DateTime.now().isAfter(deadline)) {
+          throw Exception("Registration window is closed.");
+        }
+      }
+      if (tData['scheduledStartAt'] != null) {
+        final start = DateTime.fromMillisecondsSinceEpoch((tData['scheduledStartAt'] as num).toInt());
+        if (DateTime.now().isBefore(start)) {
+          throw Exception("Registration has not opened yet.");
+        }
+      }
+    }
 
     // Fetch user rating for seeding
     final statsSnapshot = await _db.child('users').child(user.uid).child('stats').get();
@@ -293,9 +323,10 @@ class TournamentService {
     required int totalRounds,
     required int prizePool,
     required int timeLimitSeconds,
-    DateTime? autoStartAt,
+    required DateTime scheduledStartAt,
+    required int autoStartDelayMinutes,
   }) async {
-    final startAt = autoStartAt ?? DateTime.now().add(const Duration(minutes: 2));
+    final autoStartAt = scheduledStartAt.add(Duration(minutes: autoStartDelayMinutes));
     await _db.child('tournaments').child(id).set({
       'title': title,
       'description': description,
@@ -304,7 +335,8 @@ class TournamentService {
       'status': 'enrolling',
       'prizePool': prizePool,
       'timeLimit': timeLimitSeconds,
-      'autoStartAt': startAt.millisecondsSinceEpoch,
+      'scheduledStartAt': scheduledStartAt.millisecondsSinceEpoch,
+      'autoStartAt': autoStartAt.millisecondsSinceEpoch,
       'createdAt': ServerValue.timestamp,
     });
   }

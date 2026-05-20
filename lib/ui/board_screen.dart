@@ -28,23 +28,25 @@ class BoardScreen extends StatefulWidget {
   final OnlineService? onlineService;
   final bool isWhite; // For online play, determines perspective
   final String? invitationId; // For monitoring invitation status (decline/expiry)
-    final bool isVsComputer;
-    final int aiDifficulty;
-    final String? tournamentId;
-    final int? roundNumber;
+  final bool isVsComputer;
+  final int aiDifficulty;
+  final String? tournamentId;
+  final int? roundNumber;
+  final bool isSpectator;
 
-    const BoardScreen({
-      super.key, 
-      this.settings = GameSettings.blitz3,
-      this.onlineRoomId,
-      this.onlineService,
-      this.isWhite = true,
-      this.invitationId,
-      this.isVsComputer = false,
-      this.aiDifficulty = 2,
-      this.tournamentId,
-      this.roundNumber,
-    });
+  const BoardScreen({
+    super.key, 
+    this.settings = GameSettings.blitz3,
+    this.onlineRoomId,
+    this.onlineService,
+    this.isWhite = true,
+    this.invitationId,
+    this.isVsComputer = false,
+    this.aiDifficulty = 2,
+    this.tournamentId,
+    this.roundNumber,
+    this.isSpectator = false,
+  });
 
   @override
   State<BoardScreen> createState() => _BoardScreenState();
@@ -299,7 +301,7 @@ class _BoardScreenState extends State<BoardScreen> {
           }
         });
         // Record if not already recorded (check if winnerId exists in game data)
-        if (data['winnerId'] == null || data['winnerId'] == '') {
+        if (!widget.isSpectator && (data['winnerId'] == null || data['winnerId'] == '')) {
           setState(() => _hasRecordedResult = true);
           widget.onlineService!.recordGameResult(
             widget.onlineRoomId!, 
@@ -343,7 +345,7 @@ class _BoardScreenState extends State<BoardScreen> {
           }
         });
         // Record if not already recorded
-        if (data['winnerId'] == null || data['winnerId'] == '') {
+        if (!widget.isSpectator && (data['winnerId'] == null || data['winnerId'] == '')) {
           setState(() => _hasRecordedResult = true);
           widget.onlineService!.recordGameResult(
             widget.onlineRoomId!, 
@@ -386,7 +388,7 @@ class _BoardScreenState extends State<BoardScreen> {
           }
         });
         // Record draw
-        if (data['winnerId'] == null) {  // Draws have no winnerId
+        if (!widget.isSpectator && data['winnerId'] == null) {  // Draws have no winnerId
           setState(() => _hasRecordedResult = true);
           widget.onlineService!.recordGameResult(
             widget.onlineRoomId!, 
@@ -510,16 +512,18 @@ class _BoardScreenState extends State<BoardScreen> {
                
                // Check if time ran out locally
                if (_gameState.status != GameStatus.playing) {
-                 // Tell Firebase time is up
-                 final winnerId = _gameState.status == GameStatus.whiteWon ? _whitePlayerId : _blackPlayerId;
-                 final winnerStatus = _gameState.status == GameStatus.whiteWon ? 'white_won' : 'black_won';
-                 
-                 widget.onlineService!.recordGameResult(
-                   widget.onlineRoomId!, 
-                   winnerId, 
-                   winnerStatus, 
-                   'timeout'
-                 );
+                 if (!widget.isSpectator) {
+                   // Tell Firebase time is up
+                   final winnerId = _gameState.status == GameStatus.whiteWon ? _whitePlayerId : _blackPlayerId;
+                   final winnerStatus = _gameState.status == GameStatus.whiteWon ? 'white_won' : 'black_won';
+                   
+                   widget.onlineService!.recordGameResult(
+                     widget.onlineRoomId!, 
+                     winnerId, 
+                     winnerStatus, 
+                     'timeout'
+                   );
+                 }
                  
                  Future.delayed(const Duration(milliseconds: 2000), () {
                    if (mounted) setState(() => _showGameOverOverlay = true);
@@ -541,6 +545,8 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   void _onSquareTapped(Position pos, {bool isAiTap = false}) {
+    if (widget.isSpectator) return; // Spectators cannot move pieces
+    
     // Online Check: Can only move if it's my turn
     if (widget.onlineRoomId != null) {
       final myColor = widget.isWhite ? PlayerColor.white : PlayerColor.black;
@@ -847,9 +853,9 @@ class _BoardScreenState extends State<BoardScreen> {
                           BottomControls(
                             onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim, // Draw claim logic for online matches pending
                             canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
-                            onChat: widget.onlineRoomId != null ? _showChat : null,
-                            onResign: _gameState.status == GameStatus.playing ? _showResignDialog : null,
-                            showChatBadge: _hasNewMessages,
+                            onChat: (widget.onlineRoomId != null && !widget.isSpectator) ? _showChat : null,
+                            onResign: (_gameState.status == GameStatus.playing && !widget.isSpectator) ? _showResignDialog : null,
+                            showChatBadge: !widget.isSpectator && _hasNewMessages,
                           ),
                         ],
                       ),
@@ -1005,9 +1011,9 @@ class _BoardScreenState extends State<BoardScreen> {
                     child: BottomControls(
                       onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim,
                       canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
-                      onChat: widget.onlineRoomId != null ? _showChat : null,
-                      onResign: _gameState.status == GameStatus.playing ? _showResignDialog : null,
-                      showChatBadge: _hasNewMessages,
+                      onChat: (widget.onlineRoomId != null && !widget.isSpectator) ? _showChat : null,
+                      onResign: (_gameState.status == GameStatus.playing && !widget.isSpectator) ? _showResignDialog : null,
+                      showChatBadge: !widget.isSpectator && _hasNewMessages,
                     ),
                   ),
                 ],
@@ -1683,7 +1689,7 @@ class _BoardScreenState extends State<BoardScreen> {
     _invitationSubscription?.cancel();
     _chatSubscription?.cancel();
     _messageClearTimer?.cancel();
-    if (widget.onlineRoomId != null && (_gameState.status == GameStatus.playing || _firebaseGameStatus == 'waiting')) {
+    if (widget.onlineRoomId != null && (_gameState.status == GameStatus.playing || _firebaseGameStatus == 'waiting') && !widget.isSpectator) {
        widget.onlineService?.leaveGame(widget.onlineRoomId!);
     }
     super.dispose();

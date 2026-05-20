@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,11 +17,21 @@ class TournamentListScreen extends StatefulWidget {
 class _TournamentListScreenState extends State<TournamentListScreen> {
   final TournamentService _service = TournamentService();
   Stream<List<Tournament>>? _tournamentStream;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _tournamentStream = _service.streamTournaments();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -153,7 +164,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildStatusChip(t.status),
+                    _buildStatusChip(t),
                     Text(
                       "SWISS LEAGUE",
                       style: GoogleFonts.robotoMono(
@@ -206,13 +217,19 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
     );
   }
 
-  Widget _buildStatusChip(TournamentStatus status) {
+  Widget _buildStatusChip(Tournament t) {
     Color color = Colors.greenAccent;
     String text = "OPEN FOR ENLISTMENT";
     
-    if (status == TournamentStatus.active) {
+    if (t.status == TournamentStatus.completed) {
+      color = Colors.blueAccent;
+      text = "OPERATION COMPLETED";
+    } else if (t.status == TournamentStatus.active) {
       color = Colors.orangeAccent;
       text = "OPERATION ACTIVE";
+    } else if (t.status == TournamentStatus.enrolling && t.scheduledStartAt != null && DateTime.now().isBefore(t.scheduledStartAt!)) {
+      color = const Color(0xFFD4AF37);
+      text = "UPCOMING OPERATION";
     }
 
     return Container(
@@ -271,48 +288,85 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     final isJoined = t.participants.any((p) => p.userId == currentUser?.uid);
 
+    final now = DateTime.now();
+    final bool isUpcoming = t.scheduledStartAt != null && now.isBefore(t.scheduledStartAt!);
+    final bool isClosed = t.autoStartAt != null && now.isAfter(t.autoStartAt!);
+    
+    String buttonText = "JOIN OPERATION";
+    bool isDisabled = false;
+    Color buttonAccentColor = const Color(0xFFD4AF37);
+    
+    if (t.status == TournamentStatus.completed) {
+      buttonText = "SEE RESULTS";
+      buttonAccentColor = Colors.blueAccent;
+    } else if (isJoined) {
+      buttonText = "ENTER LOBBY";
+      buttonAccentColor = Colors.greenAccent;
+    } else if (isUpcoming) {
+      final h = t.scheduledStartAt!.hour.toString().padLeft(2, '0');
+      final m = t.scheduledStartAt!.minute.toString().padLeft(2, '0');
+      buttonText = "REGISTRATION OPENS AT $h:$m";
+      isDisabled = true;
+    } else if (isClosed || t.status == TournamentStatus.active) {
+      buttonText = "TOURNAMENT STARTED";
+      isDisabled = true;
+    }
+
     return Container(
       width: double.infinity,
       height: 48,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         gradient: LinearGradient(
-          colors: isJoined 
+          colors: isDisabled 
             ? [Colors.white10, Colors.white10]
-            : [const Color(0xFFD4AF37), const Color(0xFFD4AF37).withOpacity(0.8)],
+            : [buttonAccentColor, buttonAccentColor.withOpacity(0.8)],
         ),
-        boxShadow: isJoined ? [] : [
+        boxShadow: isDisabled ? [] : [
           BoxShadow(
-            color: const Color(0xFFD4AF37).withOpacity(0.2),
+            color: buttonAccentColor.withOpacity(0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: ElevatedButton(
-        onPressed: isJoined ? null : () async {
-          try {
-            await _service.joinTournament(t.id);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Enlisted successfully! Operational status updated.'))
-            );
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Deployment failed: $e'))
-            );
-          }
-        },
+        onPressed: isDisabled 
+          ? null 
+          : () async {
+              if (t.status == TournamentStatus.completed || isJoined || t.status == TournamentStatus.active) {
+                // Navigate directly to the lobby/details
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TournamentDetailScreen(tournament: t),
+                  ),
+                );
+              } else {
+                // Join the tournament
+                try {
+                  await _service.joinTournament(t.id);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enlisted successfully! Operational status updated.'))
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Deployment failed: $e'))
+                  );
+                }
+              }
+            },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: Text(
-          isJoined ? "ALREADY ENLISTED" : "JOIN OPERATION",
+          buttonText,
           style: GoogleFonts.montserrat(
             fontSize: 14,
             fontWeight: FontWeight.w800,
-            color: isJoined ? Colors.white38 : Colors.black,
+            color: isDisabled ? Colors.white38 : Colors.black,
             letterSpacing: 1.0,
           ),
         ),
