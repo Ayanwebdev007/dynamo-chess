@@ -90,57 +90,63 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E0A),
-      body: Stack(
-        children: [
-          _buildBackground(),
-          SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                _buildTabBar(),
-                Expanded(
-                  child: StreamBuilder<Tournament?>(
-                    stream: _tournamentStream,
-                    builder: (context, snapshot) {
-                      // Use live data if available, otherwise fallback to the data passed from the list
-                      final t = snapshot.data ?? widget.tournament;
-                      
-                      // Handle potential error only if we have NO data to show
-                      if (snapshot.hasError && snapshot.data == null) {
-                         return Center(
-                           child: Column(
-                             mainAxisAlignment: MainAxisAlignment.center,
-                             children: [
-                               const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-                               const SizedBox(height: 16),
-                               Text("COMMUNICATION ERROR", style: GoogleFonts.cinzel(color: Colors.redAccent)),
-                               Text("${snapshot.error}", style: const TextStyle(color: Colors.white24, fontSize: 10)),
-                             ],
-                           ),
-                         );
-                      }
-                      return Column(
-                        children: [
-                          _buildAutomationStatus(t),
-                          Expanded(
-                            child: TabBarView(
-                              controller: _tabController,
-                              children: [
-                                _buildOverviewTab(t),
-                                _buildMatchesTab(t),
-                                _buildStandingsTab(t),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.5, -0.5),
+            radius: 1.5,
+            colors: [Color(0xFF142B16), Color(0xFF0A0E0A)],
           ),
-        ],
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              _buildTabBar(),
+              Expanded(
+                child: StreamBuilder<Tournament?>(
+                  stream: _tournamentStream,
+                  builder: (context, snapshot) {
+                    // Use live data if available, otherwise fallback to the data passed from the list
+                    final t = snapshot.data ?? widget.tournament;
+                    
+                    // Handle potential error only if we have NO data to show
+                    if (snapshot.hasError && snapshot.data == null) {
+                       return Center(
+                         child: Column(
+                           mainAxisAlignment: MainAxisAlignment.center,
+                           children: [
+                             const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                             const SizedBox(height: 16),
+                             Text("COMMUNICATION ERROR", style: GoogleFonts.cinzel(color: Colors.redAccent)),
+                             Text("${snapshot.error}", style: const TextStyle(color: Colors.white24, fontSize: 10)),
+                           ],
+                         ),
+                       );
+                    }
+                    return Column(
+                      children: [
+                        _buildAutomationStatus(t),
+                        Expanded(
+                          child: TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildOverviewTab(t),
+                              _buildMatchesTab(t),
+                              _buildStandingsTab(t),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -217,8 +223,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   }
 
   Widget _buildHeader() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
       child: Row(
         children: [
           IconButton(
@@ -233,19 +241,21 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                 Text(
                   widget.tournament.title,
                   style: GoogleFonts.cinzel(
-                    fontSize: 20,
+                    fontSize: isMobile ? 16 : 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     letterSpacing: 1.0,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   "OPERATIONAL INTEL DASHBOARD",
                   style: GoogleFonts.montserrat(
-                    fontSize: 10,
+                    fontSize: isMobile ? 8 : 10,
                     color: const Color(0xFFD4AF37),
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 2.0,
+                    letterSpacing: isMobile ? 1.0 : 2.0,
                   ),
                 ),
               ],
@@ -257,8 +267,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   }
 
   Widget _buildTabBar() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
+      margin: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
@@ -271,7 +283,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
         ),
         labelColor: Colors.black,
         unselectedLabelColor: Colors.white38,
-        labelStyle: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.0),
+        labelStyle: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: isMobile ? 10 : 12, letterSpacing: 1.0),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
         tabs: const [
@@ -284,8 +296,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   }
 
   Widget _buildOverviewTab(Tournament t) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -364,8 +378,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
     final sortedRounds = List<TournamentRound>.from(t.rounds);
     sortedRounds.sort((a, b) => b.roundNumber.compareTo(a.roundNumber));
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return ListView.builder(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 12 : 24),
       itemCount: sortedRounds.length,
       itemBuilder: (context, index) {
         final round = sortedRounds[index];
@@ -411,10 +428,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   Widget _buildMatchCard(TournamentMatch match, GameSettings settings, Tournament t) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final isMyMatch = match.whitePlayerId == currentUserId || match.blackPlayerId == currentUserId;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: isMyMatch ? const Color(0xFFD4AF37).withOpacity(0.1) : Colors.white.withOpacity(0.02),
         borderRadius: BorderRadius.circular(16),
@@ -643,9 +662,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   }
 
   Widget _buildVictoryBanner(TournamentParticipant winner) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return Container(
-      margin: const EdgeInsets.all(24),
-      padding: const EdgeInsets.all(24),
+      margin: EdgeInsets.all(isMobile ? 12 : 24),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -696,9 +717,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                   winner.name.toUpperCase(),
                   style: GoogleFonts.cinzel(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: isMobile ? 18 : 24,
                     fontWeight: FontWeight.bold,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   "Score: ${winner.score} | BH: ${winner.buchholz}",
@@ -713,8 +736,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   }
 
   Widget _buildStandingsHeader() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 20 : 36, vertical: 16),
       child: Row(
         children: [
           SizedBox(width: 30, child: Text("RK", style: _standingHeaderStyle)),

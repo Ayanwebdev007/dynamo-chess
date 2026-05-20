@@ -38,32 +38,38 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E0A),
-      body: Stack(
-        children: [
-          _buildBackground(),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: StreamBuilder<List<Tournament>>(
-                    stream: _tournamentStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                      }
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return _buildEmptyState();
-                      }
-                      return _buildTournamentList(snapshot.data!);
-                    },
-                  ),
-                ),
-              ],
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.5, -0.5),
+            radius: 1.5,
+            colors: [Color(0xFF142B16), Color(0xFF0A0E0A)],
           ),
-        ],
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: StreamBuilder<List<Tournament>>(
+                  stream: _tournamentStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return _buildEmptyState();
+                    }
+                    return _buildTournamentList(snapshot.data!);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -81,8 +87,10 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
   }
 
   Widget _buildHeader() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -93,13 +101,17 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                 icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFFD4AF37)),
               ),
               const SizedBox(width: 8),
-              Text(
-                "TOURNAMENT COMMAND",
-                style: GoogleFonts.cinzel(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFFD4AF37),
-                  letterSpacing: 2.0,
+              Expanded(
+                child: Text(
+                  "TOURNAMENT COMMAND",
+                  style: GoogleFonts.cinzel(
+                    fontSize: isMobile ? 18 : 28,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFFD4AF37),
+                    letterSpacing: isMobile ? 1.0 : 2.0,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -108,10 +120,10 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
           Text(
             "SELECT AN ACTIVE OPERATION TO BEGIN DEPLOYMENT",
             style: GoogleFonts.montserrat(
-              fontSize: 12,
+              fontSize: isMobile ? 10 : 12,
               color: Colors.white38,
               fontWeight: FontWeight.w600,
-              letterSpacing: 2.0,
+              letterSpacing: isMobile ? 1.0 : 2.0,
             ),
           ),
           const SizedBox(height: 16),
@@ -126,8 +138,10 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
   }
 
   Widget _buildTournamentList(List<Tournament> tournaments) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24, vertical: 8),
       itemCount: tournaments.length,
       itemBuilder: (context, index) {
         final t = tournaments[index];
@@ -137,11 +151,13 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
   }
 
   Widget _buildTournamentCard(Tournament t) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
+      margin: EdgeInsets.only(bottom: isMobile ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(isMobile ? 16 : 24),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       clipBehavior: Clip.antiAlias,
@@ -157,14 +173,14 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
             );
           },
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: EdgeInsets.all(isMobile ? 16.0 : 24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildStatusChip(t),
+                    Flexible(child: _buildStatusChip(t)),
                     Text(
                       "SWISS LEAGUE",
                       style: GoogleFonts.robotoMono(
@@ -179,17 +195,19 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                 Text(
                   t.title,
                   style: GoogleFonts.cinzel(
-                    fontSize: 22,
+                    fontSize: isMobile ? 18 : 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     letterSpacing: 1.0,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   t.description,
                   style: GoogleFonts.montserrat(
-                    fontSize: 14,
+                    fontSize: isMobile ? 12 : 14,
                     color: Colors.white54,
                     height: 1.5,
                   ),

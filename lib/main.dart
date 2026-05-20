@@ -62,7 +62,20 @@ class DynamoChessApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         primaryColor: const Color(0xFFD4AF37),
+        scaffoldBackgroundColor: const Color(0xFF0A0E0A),
         useMaterial3: true,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFD4AF37),
+          surface: Color(0xFF0A0E0A),
+          onSurface: Colors.white,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF0A0E0A),
+          surfaceTintColor: Colors.transparent,
+        ),
+        tabBarTheme: const TabBarThemeData(
+          dividerColor: Colors.transparent,
+        ),
       ),
       initialRoute: '/',
       onGenerateRoute: (settings) {
