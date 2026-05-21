@@ -67,7 +67,7 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text("BATTLE REVIEW", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 18)),
+        title: Text("GAME REVIEW", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 18)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white70),
           onPressed: () => Navigator.pop(context),
@@ -238,7 +238,7 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("TACTICAL LOG", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold)),
+                Text("MOVE LOG", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold)),
                 if (_moves.isEmpty)
                   const Icon(Icons.history_toggle_off, color: Colors.white24, size: 16),
               ],

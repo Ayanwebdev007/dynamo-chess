@@ -25,8 +25,8 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
   final List<RuleProtocol> _protocols = [
     RuleProtocol(
       protocolId: "DYNAMO-001",
-      title: "100-SQUARE THEATER",
-      description: "Operation Dynamo expands the standard battlefield to a 10x10 strategic grid. Files I and J are added, creating a vast arena for long-range tactical maneuvers and deep flanking operations.",
+      title: "100-SQUARE BOARD",
+      description: "Dynamo Chess expands the standard board to a 10x10 strategic grid. Files I and J are added, creating a vast space for long-range tactical maneuvers and deep flanking operations.",
       setup: (board) {
         // No pieces, just show grid
       },
@@ -38,8 +38,8 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     ),
     RuleProtocol(
       protocolId: "DYNAMO-002",
-      title: "HEAVY ARSENAL",
-      description: "Each commander deploys 20 high-specialty units. The arsenal includes 10 Pawns and 10 Pieces, introducing two additional Knights and two devastating hybrid Missiles for maximum tactical density.",
+      title: "EXPANDED PIECES",
+      description: "Each player starts with 20 pieces. The setup includes 10 Pawns and 10 Pieces, introducing two additional Knights and two powerful hybrid Missiles for maximum tactical depth.",
       setup: (board) => board.initializeBoard(),
       highlights: [
         Position(3, 9), Position(6, 9), // Missiles White
@@ -48,8 +48,8 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     ),
     RuleProtocol(
       protocolId: "DYNAMO-003",
-      title: "THE MISSILE UNIT",
-      description: "The Missile (Dynamo) is a dual-capability strike unit. It combines the diagonal range of a Bishop with the L-leap mobility of a Knight. It is the most versatile offensive asset in the Dynamo armory.",
+      title: "THE MISSILE PIECE",
+      description: "The Missile (Dynamo) is a dual-capability chess piece. It combines the diagonal range of a Bishop with the L-leap mobility of a Knight. It is the most versatile offensive piece in Dynamo Chess.",
       setup: (board) {
         board.setPiece(Position(4, 4), const DynamoPiece(type: PieceType.missile, color: PlayerColor.white));
       },
@@ -66,7 +66,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     RuleProtocol(
       protocolId: "DYNAMO-004",
       title: "TRIPLE-SQUARE SURGE",
-      description: "Infantry units (Pawns) can execute an explosive deployment jump from their starting rank. They have the capability to advance 1, 2, or even 3 squares forward in a single maneuver.",
+      description: "Pawns can execute an accelerated opening jump from their starting rank. They have the capability to advance 1, 2, or even 3 squares forward in a single move.",
       setup: (board) {
         board.setPiece(Position(4, 8), const DynamoPiece(type: PieceType.pawn, color: PlayerColor.white));
       },
@@ -76,7 +76,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     RuleProtocol(
       protocolId: "DYNAMO-005",
       title: "INTERCEPT EN-PASSANT",
-      description: "If an enemy pawn uses an accelerated jump (2 or 3 squares) to bypass your unit's threat zone, you may execute an 'En-Passant' interception on the immediately following move.",
+      description: "If an enemy pawn uses an accelerated jump (2 or 3 squares) to bypass your piece's threat zone, you may execute an 'En-Passant' capture on the immediately following move.",
       setup: (board) {
         board.setPiece(Position(3, 3), const DynamoPiece(type: PieceType.pawn, color: PlayerColor.white));
         board.setPiece(Position(4, 4), const DynamoPiece(type: PieceType.pawn, color: PlayerColor.black));
@@ -89,7 +89,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     RuleProtocol(
       protocolId: "DYNAMO-006",
       title: "DEEP CASTLING",
-      description: "The King executes a 3-square maneuver toward the Rook during castling. This provides deeper security in the expanded 10x10 theater, placing the Commander behind a stronger defensive line.",
+      description: "The King executes a 3-square move toward the Rook during castling. This provides deeper security in the expanded 10x10 board, placing the King behind a stronger defensive line.",
       setup: (board) {
         board.setPiece(Position(5, 9), const DynamoPiece(type: PieceType.king, color: PlayerColor.white));
         board.setPiece(Position(9, 9), const DynamoPiece(type: PieceType.rook, color: PlayerColor.white));
@@ -100,7 +100,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     RuleProtocol(
       protocolId: "DYNAMO-007",
       title: "ELITE PROMOTION",
-      description: "Pawns reaching the 10th rank are eligible for field promotion. They may be upgraded to any piece, including the formidable Missile, ensuring late-game dominance.",
+      description: "Pawns reaching the 10th rank are eligible for promotion. They may be upgraded to any piece, including the powerful Missile, ensuring late-game dominance.",
       setup: (board) {
         board.setPiece(Position(4, 1), const DynamoPiece(type: PieceType.pawn, color: PlayerColor.white));
       },
@@ -109,8 +109,8 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     ),
     RuleProtocol(
       protocolId: "DYNAMO-008",
-      title: "ASSET VALUATIONS",
-      description: "Strategic Protocol Values: Pawn (1), Knight (3), Bishop (3), Rook (5), Missile (7), Queen (9). Use these metrics to assess mission risk and trade-off profitability.",
+      title: "PIECE VALUATIONS",
+      description: "Strategic Piece Values: Pawn (1), Knight (3), Bishop (3), Rook (5), Missile (7), Queen (9). Use these values to assess game trades and strategic decisions.",
       setup: (board) {
         board.setPiece(Position(0, 5), const DynamoPiece(type: PieceType.pawn, color: PlayerColor.white));
         board.setPiece(Position(2, 5), const DynamoPiece(type: PieceType.knight, color: PlayerColor.white));
@@ -121,8 +121,8 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     ),
     RuleProtocol(
       protocolId: "DYNAMO-009",
-      title: "THE CORNER STRANGLE",
-      description: "The Missile is the only single unit in the Dynamo arsenal capable of delivering a solo checkmate to a cornered King. It is the ultimate endgame closer.",
+      title: "THE CORNER CHECKMATE",
+      description: "The Missile is the only single piece in Dynamo Chess capable of delivering a solo checkmate to a cornered King. It is the ultimate endgame closer.",
       setup: (board) {
         board.setPiece(Position(9, 0), const DynamoPiece(type: PieceType.king, color: PlayerColor.black));
         board.setPiece(Position(7, 1), const DynamoPiece(type: PieceType.missile, color: PlayerColor.white));
@@ -168,7 +168,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
             child: Column(
               children: [
                 _buildTopNavigation(),
-                _buildMissionProgress(),
+                _buildRulesProgress(),
                 Expanded(
                   child: PageView.builder(
                     controller: _pageController,
@@ -244,7 +244,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
                 style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 6),
               ),
               Text(
-                "DYNAMO OPERATIONAL PROCEDURES",
+                "DYNAMO RULES & PROCEDURES",
                 style: GoogleFonts.montserrat(color: Colors.white12, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 2),
               ),
             ],
@@ -255,7 +255,7 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildMissionProgress() {
+  Widget _buildRulesProgress() {
     return Container(
       height: 2,
       width: double.infinity,
@@ -283,10 +283,29 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
         final bool isDesktop = constraints.maxWidth > 950;
         
         if (isDesktop) {
+          // Calculate dynamic board size to prevent vertical and horizontal overflow on desktop viewports
+          final double maxBoardWidth = constraints.maxWidth * 0.55;
+          final double maxBoardHeight = constraints.maxHeight - 60; // 30px padding top/bottom
+          double boardSize = maxBoardWidth < maxBoardHeight ? maxBoardWidth : maxBoardHeight;
+          if (boardSize > 580) boardSize = 580;
+          if (boardSize < 280) boardSize = 280;
+
           return Row(
             children: [
-              Expanded(flex: 4, child: Padding(padding: const EdgeInsets.all(60.0), child: _buildProtocolText(protocol, true))),
-              Expanded(flex: 6, child: Center(child: _buildTacticalBoard(protocol, board, 580))),
+              Expanded(
+                flex: 4,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 20.0),
+                  child: _buildProtocolText(protocol, true),
+                ),
+              ),
+              Expanded(
+                flex: 6,
+                child: Center(
+                  child: _buildTacticalBoard(protocol, board, boardSize),
+                ),
+              ),
             ],
           );
         } else {

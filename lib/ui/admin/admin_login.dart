@@ -12,8 +12,8 @@ class AdminLoginScreen extends StatefulWidget {
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  static const String _adminEmail = "admin@advancedchess.in";
-  static const String _adminPassword = "DynamoAdminLogin2026";
+  static const String _adminEmail = "admin";
+  static const String _adminPassword = "admin";
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
@@ -75,7 +75,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const PlatformAssetImage(assetPath: 'assets/dynamo_logo.png', viewType: 'dynamo_logo', width: 80, height: 80),
+                      const PlatformAssetImage(assetPath: 'assets/dynamo_logo.png', viewType: 'dynamo_logo', width: 180, height: 180),
                       const SizedBox(height: 24),
                       Text("ADMIN ACCESS", style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFFD4AF37))),
                       const SizedBox(height: 32),
@@ -100,7 +100,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       const SizedBox(height: 24),
                       TextButton(
                         onPressed: () => Navigator.of(context).pushReplacementNamed('/'),
-                        child: Text("Return to Terminal", style: GoogleFonts.montserrat(color: Colors.white24, fontSize: 12)),
+                        child: Text("Return to Main Menu", style: GoogleFonts.montserrat(color: Colors.white24, fontSize: 12)),
                       ),
                     ],
                   ),

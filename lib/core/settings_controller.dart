@@ -19,7 +19,7 @@ class SettingsController extends ChangeNotifier {
   bool _showLastMove = true;
   bool _autoPromote = false;
   bool _showCoordinates = true;
-  String _boardTheme = 'onyx'; // 'onyx', 'classic', 'wood', 'emerald'
+  String _boardTheme = 'classic'; // 'classic', 'onyx', 'wood', 'emerald'
 
   bool get isSoundEnabled => _isSoundEnabled;
   bool get showLegalMoves => _showLegalMoves;
@@ -37,7 +37,7 @@ class SettingsController extends ChangeNotifier {
       _showLastMove = _prefs?.getBool(_keyShowLastMove) ?? true;
       _autoPromote = _prefs?.getBool(_keyAutoPromote) ?? false;
       _showCoordinates = _prefs?.getBool(_keyShowCoordinates) ?? true;
-      _boardTheme = _prefs?.getString(_keyBoardTheme) ?? 'onyx';
+      _boardTheme = _prefs?.getString(_keyBoardTheme) ?? 'classic';
     } catch (e) {
       debugPrint('SettingsController: SharedPreferences not available: $e');
     }

@@ -242,7 +242,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  "OPERATIONAL INTEL DASHBOARD",
+                  "TOURNAMENT INFO DASHBOARD",
                   style: GoogleFonts.montserrat(
                     fontSize: isMobile ? 8 : 10,
                     color: const Color(0xFFD4AF37),
@@ -313,10 +313,10 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
             ],
           ),
           const SizedBox(height: 24),
-          _buildSectionHeader("OPERATIONAL RULES"),
+          _buildSectionHeader("TOURNAMENT RULES"),
           const SizedBox(height: 16),
           _buildRuleItem("Swiss System pairing logic applied."),
-          _buildRuleItem("3-minute Blitz time control per deployment."),
+          _buildRuleItem("3-minute Blitz time control per match."),
           _buildRuleItem("Points: Win 1.0 | Draw 0.5 | Loss 0.0"),
           _buildRuleItem("Tie-breaks resolved via Buchholz calculation."),
         ],
@@ -343,7 +343,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
               ),
               const SizedBox(height: 32),
               Text(
-                "AWAITING DEPLOYMENT",
+                "AWAITING MATCH START",
                 style: GoogleFonts.cinzel(
                   color: Colors.white,
                   fontSize: 22,
@@ -524,7 +524,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                "AUTO-DEPLOYMENT ACTIVE",
+                                "AUTO-START MATCH ACTIVE",
                                 style: GoogleFonts.montserrat(
                                   color: const Color(0xFFD4AF37),
                                   fontSize: 9,
@@ -736,7 +736,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
         children: [
           SizedBox(width: 30, child: Text("RK", style: _standingHeaderStyle)),
           const SizedBox(width: 12),
-          Expanded(child: Text("COMMANDER", style: _standingHeaderStyle)),
+          Expanded(child: Text("PLAYER", style: _standingHeaderStyle)),
           SizedBox(width: 60, child: Text("SCORE", style: _standingHeaderStyle, textAlign: TextAlign.center)),
           SizedBox(width: 60, child: Text("BH", style: _standingHeaderStyle, textAlign: TextAlign.center)),
         ],

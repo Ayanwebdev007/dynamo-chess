@@ -103,7 +103,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  "TOURNAMENT COMMAND",
+                  "TOURNAMENTS",
                   style: GoogleFonts.cinzel(
                     fontSize: isMobile ? 18 : 28,
                     fontWeight: FontWeight.w900,
@@ -118,7 +118,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            "SELECT AN ACTIVE OPERATION TO BEGIN DEPLOYMENT",
+            "SELECT AN ACTIVE TOURNAMENT TO REGISTER",
             style: GoogleFonts.montserrat(
               fontSize: isMobile ? 10 : 12,
               color: Colors.white38,
@@ -237,17 +237,17 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
 
   Widget _buildStatusChip(Tournament t) {
     Color color = Colors.greenAccent;
-    String text = "OPEN FOR ENLISTMENT";
+    String text = "REGISTRATION OPEN";
     
     if (t.status == TournamentStatus.completed) {
       color = Colors.blueAccent;
-      text = "OPERATION COMPLETED";
+      text = "TOURNAMENT COMPLETED";
     } else if (t.status == TournamentStatus.active) {
       color = Colors.orangeAccent;
-      text = "OPERATION ACTIVE";
+      text = "TOURNAMENT ACTIVE";
     } else if (t.status == TournamentStatus.enrolling && t.scheduledStartAt != null && DateTime.now().isBefore(t.scheduledStartAt!)) {
       color = const Color(0xFFD4AF37);
-      text = "UPCOMING OPERATION";
+      text = "UPCOMING TOURNAMENT";
     }
 
     return Container(
@@ -310,7 +310,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
     final bool isUpcoming = t.scheduledStartAt != null && now.isBefore(t.scheduledStartAt!);
     final bool isClosed = t.autoStartAt != null && now.isAfter(t.autoStartAt!);
     
-    String buttonText = "JOIN OPERATION";
+    String buttonText = "JOIN TOURNAMENT";
     bool isDisabled = false;
     Color buttonAccentColor = const Color(0xFFD4AF37);
     
@@ -365,11 +365,11 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                 try {
                   await _service.joinTournament(t.id);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enlisted successfully! Operational status updated.'))
+                    const SnackBar(content: Text('Registered successfully! Tournament status updated.'))
                   );
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Deployment failed: $e'))
+                    SnackBar(content: Text('Registration failed: $e'))
                   );
                 }
               }
@@ -402,7 +402,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
             Icon(Icons.shield_outlined, size: 80, color: Colors.white.withOpacity(0.05)),
             const SizedBox(height: 24),
             Text(
-              "NO ACTIVE OPERATIONS",
+              "NO ACTIVE TOURNAMENTS",
               style: GoogleFonts.cinzel(
                 color: Colors.white24,
                 fontSize: 18,
@@ -412,7 +412,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              "The command center is awaiting signal. If this persists, attempt a manual re-deployment.",
+              "The tournament dashboard is awaiting signal. If this persists, please try again later.",
               textAlign: TextAlign.center,
               style: GoogleFonts.montserrat(
                 color: Colors.white12,

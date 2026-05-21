@@ -302,7 +302,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionHeader("SELECT MISSION"),
+                        _buildSectionHeader("SELECT GAME MODE"),
                         const SizedBox(height: 24),
                          _buildGlassModeButton(
                           _currentUser == null ? "LOGIN TO PLAY ONLINE" : "PLAY ONLINE", 
@@ -407,7 +407,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
               ),
               const SizedBox(height: 60),
-              _buildSectionHeader("SELECT MISSION"),
+              _buildSectionHeader("SELECT GAME MODE"),
               const SizedBox(height: 16),
               Row(
                 children: [

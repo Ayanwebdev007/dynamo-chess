@@ -210,7 +210,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("COMMANDER REGISTRY", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          Text("PLAYER REGISTRY", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 32),
           Container(
             decoration: BoxDecoration(
@@ -226,7 +226,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     children: [
                       const Icon(Icons.search, color: Colors.white38),
                       const SizedBox(width: 16),
-                      Text("Search commanders...", style: GoogleFonts.montserrat(color: Colors.white24)),
+                      Text("Search players...", style: GoogleFonts.montserrat(color: Colors.white24)),
                       const Spacer(),
                       const Icon(Icons.filter_list, color: Colors.white38),
                     ],
@@ -250,7 +250,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("LIVE BATTLE OPERATIONS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          Text("LIVE MATCHES", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 32),
           _buildLiveGamesList(),
         ],
@@ -274,7 +274,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user['displayName'] ?? "Unknown Commander", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(user['displayName'] ?? "Unknown Player", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 Text(user['email'] ?? "No email recorded", style: const TextStyle(color: Colors.white38, fontSize: 12)),
               ],
             ),
@@ -347,7 +347,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 onPressed: () => setState(() => _selectedUser = null),
               ),
               const SizedBox(width: 16),
-              Text("PERSONNEL FILE: ${user['displayName']?.toUpperCase()}", 
+              Text("PLAYER FILE: ${user['displayName']?.toUpperCase()}", 
                 style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -377,7 +377,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      _buildInfoRow("Commander Name", user['displayName'] ?? "Unknown"),
+                      _buildInfoRow("Player Name", user['displayName'] ?? "Unknown"),
                       _buildInfoRow("Email Address", user['email'] ?? "N/A"),
                       _buildInfoRow("Unique ID", user['uid'] ?? "N/A"),
                       _buildInfoRow("Account Created", "Realtime Data"),
@@ -385,9 +385,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       Text("AGGREGATE STATS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 20),
                       _buildStatDetailRow("Global Rating", "${user['stats']?['rating'] ?? 1200}"),
-                      _buildStatDetailRow("Battles Won", "${user['stats']?['wins'] ?? 0}"),
-                      _buildStatDetailRow("Battles Lost", "${user['stats']?['losses'] ?? 0}"),
-                      _buildStatDetailRow("Total Deployments", "${user['stats']?['totalGames'] ?? 0}"),
+                      _buildStatDetailRow("Games Won", "${user['stats']?['wins'] ?? 0}"),
+                      _buildStatDetailRow("Games Lost", "${user['stats']?['losses'] ?? 0}"),
+                      _buildStatDetailRow("Total Games", "${user['stats']?['totalGames'] ?? 0}"),
                     ],
                   ),
                 ),
@@ -406,12 +406,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("BATTLE HISTORY", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text("GAME HISTORY", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 24),
                       if (_isFetchingUserHistory)
                         const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
                       else if (_userGameHistory.isEmpty)
-                        const Center(child: Padding(padding: EdgeInsets.all(40), child: Text("No battle records found for this commander", style: TextStyle(color: Colors.white24))))
+                        const Center(child: Padding(padding: EdgeInsets.all(40), child: Text("No game records found for this player", style: TextStyle(color: Colors.white24))))
                       else
                         _buildHistoryTable(),
                     ],
@@ -583,9 +583,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildStatsGrid() {
     return Row(
       children: [
-        _buildStatCard("TOTAL COMMANDERS", _totalUsers.toString(), Icons.people, Colors.blueAccent),
+        _buildStatCard("TOTAL PLAYERS", _totalUsers.toString(), Icons.people, Colors.blueAccent),
         const SizedBox(width: 24),
-        _buildStatCard("ACTIVE BATTLES", _activeGames.toString(), Icons.sports_esports, const Color(0xFFD4AF37)),
+        _buildStatCard("ACTIVE GAMES", _activeGames.toString(), Icons.sports_esports, const Color(0xFFD4AF37)),
         const SizedBox(width: 24),
         _buildStatCard("SERVER LATENCY", "24ms", Icons.speed, Colors.greenAccent),
         const SizedBox(width: 24),
@@ -632,7 +632,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("LIVE BATTLES", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+          Text("LIVE GAMES", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           if (_liveGames.isEmpty)
             const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No active games", style: TextStyle(color: Colors.white24)))),
@@ -672,7 +672,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(width: 12),
             IconButton(
               icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
-              tooltip: 'TERMINATE BATTLE',
+              tooltip: 'TERMINATE GAME',
               onPressed: () => _showTerminateGameDialog(game['id']),
             ),
           ],
@@ -686,7 +686,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text("TERMINATE BATTLE?"),
+        title: const Text("TERMINATE GAME?"),
         content: Text("Are you sure you want to force abort room $roomId? This will clear it from active matches."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
@@ -714,7 +714,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("RECENT COMMANDERS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+          Text("RECENT PLAYERS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           ..._allUsers.take(8).map((user) => _buildUserSmallTile(user)),
         ],
@@ -738,7 +738,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user['displayName'] ?? "Commander", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(user['displayName'] ?? "Player", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
                 Text(user['email'] ?? "", style: const TextStyle(color: Colors.white24, fontSize: 10)),
               ],
             ),
@@ -763,11 +763,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("TOURNAMENT OPERATIONS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+                  Text("TOURNAMENT MANAGEMENT", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
                   ElevatedButton.icon(
                     onPressed: _showCreateTournamentDialog,
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text("CREATE OPERATION"),
+                    label: const Text("CREATE TOURNAMENT"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFD4AF37),
                       foregroundColor: Colors.black,
@@ -796,7 +796,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           const SizedBox(height: 100),
           Icon(Icons.emoji_events_outlined, size: 80, color: Colors.white.withOpacity(0.05)),
           const SizedBox(height: 24),
-          Text("NO ACTIVE OPERATIONS", style: GoogleFonts.cinzel(color: Colors.white24, fontSize: 18)),
+          Text("NO ACTIVE TOURNAMENTS", style: GoogleFonts.cinzel(color: Colors.white24, fontSize: 18)),
         ],
       ),
     );
@@ -895,13 +895,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
-          title: Text("DEPLOY NEW OPERATION", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37))),
+          title: Text("CREATE NEW TOURNAMENT", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37))),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildAdminTextField(titleController, "Operation Title", "e.g. Dynamo Elite Cup"),
-                _buildAdminTextField(descController, "Mission Objective", "Brief description of the tournament", maxLines: 3),
+                _buildAdminTextField(titleController, "Tournament Title", "e.g. Dynamo Elite Cup"),
+                _buildAdminTextField(descController, "Tournament Description", "Brief description of the tournament", maxLines: 3),
                 Row(
                   children: [
                     Expanded(
@@ -1021,7 +1021,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("ABORT")),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
             ElevatedButton(
               onPressed: () async {
                 try {
@@ -1038,20 +1038,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Operation Deployed Successfully')),
+                      const SnackBar(content: Text('Tournament Created Successfully')),
                     );
                     Navigator.pop(context);
                   }
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Deployment Failed: $e'), backgroundColor: Colors.redAccent),
+                      SnackBar(content: Text('Tournament Creation Failed: $e'), backgroundColor: Colors.redAccent),
                     );
                   }
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-              child: const Text("DEPLOY"),
+              child: const Text("CREATE"),
             ),
           ],
         ),
@@ -1064,7 +1064,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text("TERMINATE OPERATION?"),
+        title: const Text("DELETE TOURNAMENT?"),
         content: Text("Are you sure you want to permanently delete ${t.title}? This action cannot be undone."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),

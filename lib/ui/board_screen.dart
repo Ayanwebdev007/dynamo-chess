@@ -1521,7 +1521,7 @@ class _BoardScreenState extends State<BoardScreen> {
     });
   }
   
-  Widget _buildBoardBackground(double squareSize, {String theme = 'onyx', bool showCoords = true}) {
+  Widget _buildBoardBackground(double squareSize, {String theme = 'classic', bool showCoords = true}) {
     final colors = _getThemeColors(theme);
     final lightColor = colors['light']!;
     final darkColor = colors['dark']!;
