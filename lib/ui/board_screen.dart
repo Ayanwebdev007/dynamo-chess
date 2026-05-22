@@ -222,28 +222,41 @@ class _BoardScreenState extends State<BoardScreen> {
     debugPrint('🤖 AI: Thinking...');
     setState(() => _isAiThinking = true);
 
-    final stopwatch = Stopwatch()..start();
-    
-    // Depth 2 provides a good balance of speed and casual intelligence without blocking
-    final bestMove = await AIEngine.getBestMove(_gameState.board, aiColor, 2);
+    try {
+      final stopwatch = Stopwatch()..start();
+      
+      // Depth 2 provides a good balance of speed and casual intelligence without blocking
+      final bestMove = await AIEngine.getBestMove(_gameState.board, aiColor, 2);
 
-    // Ensure at least 2 seconds have passed since the start of thinking
-    final elapsed = stopwatch.elapsedMilliseconds;
-    final remainingDelay = 2000 - elapsed;
-    if (remainingDelay > 0 && mounted) {
-      await Future.delayed(Duration(milliseconds: remainingDelay));
-    }
+      // Ensure at least 2 seconds have passed since the start of thinking
+      final elapsed = stopwatch.elapsedMilliseconds;
+      final remainingDelay = 2000 - elapsed;
+      if (remainingDelay > 0 && mounted) {
+        await Future.delayed(Duration(milliseconds: remainingDelay));
+      }
 
-    if (mounted && bestMove != null) {
-      debugPrint('🤖 AI: Executing move from ${bestMove.start} to ${bestMove.end}');
-      setState(() {
-        _isAiThinking = false;
-        _onSquareTapped(bestMove.start, isAiTap: true); // Select
-        _onSquareTapped(bestMove.end, isAiTap: true);   // Move
-      });
-    } else if (mounted) {
-      debugPrint('🤖 AI: No move found or unmounted');
-      setState(() => _isAiThinking = false);
+      if (mounted && bestMove != null) {
+        debugPrint('🤖 AI: Executing move from ${bestMove.start} to ${bestMove.end}');
+        setState(() {
+          _isAiThinking = false;
+          _onSquareTapped(bestMove.start, isAiTap: true); // Select
+          _onSquareTapped(bestMove.end, isAiTap: true);   // Move
+        });
+      } else if (mounted) {
+        debugPrint('🤖 AI: No move found or unmounted');
+        setState(() => _isAiThinking = false);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ AI Error: $e\n$stackTrace');
+      if (mounted) {
+        setState(() => _isAiThinking = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("AI thinking error: $e", style: GoogleFonts.montserrat()),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 

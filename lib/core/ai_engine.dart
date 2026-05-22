@@ -63,6 +63,8 @@ class AIEngine {
     // Clone board so UI doesn't render simulated states
     DynamoBoard simBoard = _cloneBoard(board);
 
+    List<Move> bestMoves = [];
+
     for (var move in allMoves) {
       // Simulate move
       final originalEndPiece = simBoard.getPiece(move.end);
@@ -81,8 +83,14 @@ class AIEngine {
       
       if (boardValue > bestValue) {
         bestValue = boardValue;
-        bestMove = move;
+        bestMoves = [move];
+      } else if (boardValue == bestValue) {
+        bestMoves.add(move);
       }
+    }
+    
+    if (bestMoves.isNotEmpty) {
+      bestMove = bestMoves[Random().nextInt(bestMoves.length)];
     }
     
     return bestMove;
@@ -167,11 +175,6 @@ class AIEngine {
         }
       }
     }
-    
-    // Add Mobility Bonus
-    totalEvaluation += _getAllLegalMoves(board, aiColor).length;
-    totalEvaluation -= _getAllLegalMoves(board, aiColor == PlayerColor.white ? PlayerColor.black : PlayerColor.white).length;
-
     return totalEvaluation;
   }
 
