@@ -20,7 +20,7 @@ class TournamentParticipant {
   double score;
   double buchholz;
   List<String> opponents; // IDs of opponents faced
-  List<PlayerColor> colors; // List of colors played (white, black)
+  List<PlayerColor?> colors; // List of colors played (white, black, or none/null)
 
   TournamentParticipant({
     required this.userId,
@@ -29,7 +29,7 @@ class TournamentParticipant {
     this.score = 0.0,
     this.buchholz = 0.0,
     List<String>? opponents,
-    List<PlayerColor>? colors,
+    List<PlayerColor?>? colors,
   }) : opponents = opponents ?? [],
        colors = colors ?? [];
 

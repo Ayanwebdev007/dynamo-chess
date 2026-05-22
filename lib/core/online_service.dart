@@ -142,6 +142,10 @@ class OnlineService {
   
   // Explicitly leave game
   Future<void> leaveGame(String roomId) async {
+    if (roomId.startsWith('tm_')) {
+      print('DEBUG: Not aborting tournament game: $roomId');
+      return;
+    }
     try {
       await _db.child('games').child(roomId).update({'status': 'aborted'});
       await _db.child('games').child(roomId).onDisconnect().cancel();

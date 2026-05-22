@@ -72,6 +72,7 @@ class _BoardScreenState extends State<BoardScreen> {
   final ScrollController _moveScrollController = ScrollController();
   final SettingsController _settings = SettingsController();
   bool _hasRecordedResult = false; // Prevent double recording
+  bool _hasScheduledAutoQuit = false; // Prevent double auto-quitting
 
   @override
   void initState() {
@@ -279,27 +280,20 @@ class _BoardScreenState extends State<BoardScreen> {
       }
       
       // Record game results when game ends (first client to detect it records for both)
-      if (status == 'white_won' && _gameState.status == GameStatus.playing) {
+      if (status == 'white_won') {
         final method = data['gameMethod'] ?? 'checkmate';
-        setState(() {
-          _gameState.status = GameStatus.whiteWon;
-          _gameState.gameResult = method == 'resignation' ? "Black Resigned" : "White Wins!";
-        });
+        if (_gameState.status == GameStatus.playing) {
+          setState(() {
+            _gameState.status = GameStatus.whiteWon;
+            _gameState.gameResult = method == 'resignation' ? "Black Resigned" : "White Wins!";
+          });
+        }
         
         // Delay the overlay to let user see the board
         Future.delayed(const Duration(milliseconds: 2000), () {
-          if (mounted) {
-            setState(() => _showGameOverOverlay = true);
-            if (widget.tournamentId != null) {
-              Future.delayed(const Duration(seconds: 10), () {
-                if (mounted) {
-                  print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
-                  Navigator.of(context).pop();
-                }
-              });
-            }
-          }
+          _showGameOverAndScheduleAutoQuit();
         });
+        
         // Record if not already recorded (check if winnerId exists in game data)
         if (!widget.isSpectator && (data['winnerId'] == null || data['winnerId'] == '')) {
           setState(() => _hasRecordedResult = true);
@@ -323,27 +317,20 @@ class _BoardScreenState extends State<BoardScreen> {
         return;
       }
       
-      if (status == 'black_won' && _gameState.status == GameStatus.playing) {
+      if (status == 'black_won') {
         final method = data['gameMethod'] ?? 'checkmate';
-         setState(() {
-          _gameState.status = GameStatus.blackWon;
-          _gameState.gameResult = method == 'resignation' ? "White Resigned" : "Black Wins!";
-        });
+        if (_gameState.status == GameStatus.playing) {
+          setState(() {
+            _gameState.status = GameStatus.blackWon;
+            _gameState.gameResult = method == 'resignation' ? "White Resigned" : "Black Wins!";
+          });
+        }
         
         // Delay the overlay to let user see the board
         Future.delayed(const Duration(milliseconds: 2000), () {
-          if (mounted) {
-            setState(() => _showGameOverOverlay = true);
-            if (widget.tournamentId != null) {
-              Future.delayed(const Duration(seconds: 10), () {
-                if (mounted) {
-                  print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
-                  Navigator.of(context).pop();
-                }
-              });
-            }
-          }
+          _showGameOverAndScheduleAutoQuit();
         });
+        
         // Record if not already recorded
         if (!widget.isSpectator && (data['winnerId'] == null || data['winnerId'] == '')) {
           setState(() => _hasRecordedResult = true);
@@ -367,26 +354,19 @@ class _BoardScreenState extends State<BoardScreen> {
         return;
       }
       
-      if (status == 'draw' && _gameState.status == GameStatus.playing) {
-        setState(() {
-          _gameState.status = GameStatus.draw;
-          _gameState.gameResult = "Draw!";
-        });
+      if (status == 'draw') {
+        if (_gameState.status == GameStatus.playing) {
+          setState(() {
+            _gameState.status = GameStatus.draw;
+            _gameState.gameResult = "Draw!";
+          });
+        }
         
         // Delay the overlay to let user see the board
         Future.delayed(const Duration(milliseconds: 2000), () {
-          if (mounted) {
-            setState(() => _showGameOverOverlay = true);
-            if (widget.tournamentId != null) {
-              Future.delayed(const Duration(seconds: 10), () {
-                if (mounted) {
-                  print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
-                  Navigator.of(context).pop();
-                }
-              });
-            }
-          }
+          _showGameOverAndScheduleAutoQuit();
         });
+        
         // Record draw
         if (!widget.isSpectator && data['winnerId'] == null) {  // Draws have no winnerId
           setState(() => _hasRecordedResult = true);
@@ -500,7 +480,7 @@ class _BoardScreenState extends State<BoardScreen> {
            if (_gameState.status != GameStatus.playing) {
              _checkAndRecordOfflineGameOver();
              Future.delayed(const Duration(milliseconds: 2000), () {
-               if (mounted) setState(() => _showGameOverOverlay = true);
+               _showGameOverAndScheduleAutoQuit();
              });
            }
          });
@@ -513,20 +493,11 @@ class _BoardScreenState extends State<BoardScreen> {
                // Check if time ran out locally
                if (_gameState.status != GameStatus.playing) {
                  if (!widget.isSpectator) {
-                   // Tell Firebase time is up
-                   final winnerId = _gameState.status == GameStatus.whiteWon ? _whitePlayerId : _blackPlayerId;
-                   final winnerStatus = _gameState.status == GameStatus.whiteWon ? 'white_won' : 'black_won';
-                   
-                   widget.onlineService!.recordGameResult(
-                     widget.onlineRoomId!, 
-                     winnerId, 
-                     winnerStatus, 
-                     'timeout'
-                   );
+                   _checkAndRecordOnlineGameOver();
                  }
                  
                  Future.delayed(const Duration(milliseconds: 2000), () {
-                   if (mounted) setState(() => _showGameOverOverlay = true);
+                   _showGameOverAndScheduleAutoQuit();
                  });
                }
              });
@@ -597,7 +568,7 @@ class _BoardScreenState extends State<BoardScreen> {
             
             // Delay the overlay
             Future.delayed(const Duration(milliseconds: 2000), () {
-              if (mounted) setState(() => _showGameOverOverlay = true);
+              _showGameOverAndScheduleAutoQuit();
             });
           }
       });
@@ -1354,6 +1325,23 @@ class _BoardScreenState extends State<BoardScreen> {
     _hasRecordedResult = true;
   }
 
+  void _showGameOverAndScheduleAutoQuit() {
+    if (!mounted) return;
+    setState(() {
+      _showGameOverOverlay = true;
+    });
+    if (widget.tournamentId != null && !_hasScheduledAutoQuit) {
+      _hasScheduledAutoQuit = true;
+      print('🚀 AUTO-QUIT: Scheduled return to tournament dashboard in 10 seconds.');
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted) {
+          print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
+          Navigator.of(context).pop();
+        }
+      });
+    }
+  }
+
   void _showAbortedDialog({String? reason}) {
     showDialog(
       context: context,
@@ -1409,7 +1397,7 @@ class _BoardScreenState extends State<BoardScreen> {
       _gameState.resign(myColor);
       
       // Show overlay immediately for resignation
-      _showGameOverOverlay = true;
+      _showGameOverAndScheduleAutoQuit();
       
       if (widget.onlineRoomId != null) {
         // Only update status - stream listener will handle recording
@@ -1689,7 +1677,11 @@ class _BoardScreenState extends State<BoardScreen> {
     _invitationSubscription?.cancel();
     _chatSubscription?.cancel();
     _messageClearTimer?.cancel();
-    if (widget.onlineRoomId != null && (_gameState.status == GameStatus.playing || _firebaseGameStatus == 'waiting') && !widget.isSpectator) {
+    if (widget.onlineRoomId != null && 
+        widget.tournamentId == null && 
+        !widget.onlineRoomId!.startsWith('tm_') &&
+        (_gameState.status == GameStatus.playing || _firebaseGameStatus == 'waiting') && 
+        !widget.isSpectator) {
        widget.onlineService?.leaveGame(widget.onlineRoomId!);
     }
     super.dispose();
