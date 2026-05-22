@@ -305,7 +305,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         _buildSectionHeader("SELECT GAME MODE"),
                         const SizedBox(height: 24),
                          _buildGlassModeButton(
-                          _currentUser == null ? "LOGIN TO PLAY ONLINE" : "PLAY ONLINE", 
+                          _currentUser == null ? "LOGIN TO ONLINE" : "ONLINE", 
                           Icons.public, 
                           false, 
                           () {
@@ -319,14 +319,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         const SizedBox(height: 16),
                         Row(
                           children: [
-                            Expanded(child: _buildGlassModeButton("PLAY OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false))),
+                            Expanded(child: _buildGlassModeButton("OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false))),
                             const SizedBox(width: 16),
-                            Expanded(child: _buildGlassModeButton("PLAY WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true))),
+                            Expanded(child: _buildGlassModeButton("WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true))),
                           ],
                         ),
                         const SizedBox(height: 16),
                         _buildGlassModeButton(
-                          "DYNAMO TOURNAMENT", 
+                          "TOURNAMENT", 
                           Icons.emoji_events_outlined, 
                           false, 
                           () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()))
@@ -413,7 +413,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 children: [
                   Expanded(
                     child: _buildGlassModeButton(
-                      _currentUser == null ? "ONLINE" : "PLAY ONLINE", 
+                      "ONLINE", 
                       Icons.public, 
                       false, 
                       () {
@@ -440,7 +440,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildGlassModeButton(
-                      "TOURNAMENTS", 
+                      "TOURNAMENT", 
                       Icons.emoji_events_outlined, 
                       false, 
                       () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()))

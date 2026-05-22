@@ -196,7 +196,7 @@ class _OnlineMenuScreenState extends State<OnlineMenuScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text("ONLINE CHESS", style: GoogleFonts.cinzel(fontSize: 32, color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+                        Text("ONLINE", style: GoogleFonts.cinzel(fontSize: 32, color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
                         const SizedBox(height: 48),
                         _buildButton("FIND MATCH", Icons.search, _findRandomMatch),
                         const SizedBox(height: 16),

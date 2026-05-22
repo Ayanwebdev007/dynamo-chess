@@ -103,7 +103,7 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  "TOURNAMENTS",
+                  "TOURNAMENT",
                   style: GoogleFonts.cinzel(
                     fontSize: isMobile ? 18 : 28,
                     fontWeight: FontWeight.w900,
