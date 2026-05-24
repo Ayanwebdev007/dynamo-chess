@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_database/firebase_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Client-side FCM sender using the HTTP v1 API.
 /// Reads the service-account key bundled in assets, obtains an OAuth2 token,
@@ -27,12 +29,23 @@ class FcmSenderService {
       return _cachedCredentials!.accessToken.data;
     }
 
-    final jsonString =
-        await rootBundle.loadString('assets/service_account.json');
+    String jsonString;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedKey = prefs.getString('fcm_service_account_json');
+      if (savedKey != null && savedKey.isNotEmpty && savedKey != '{}') {
+        jsonString = savedKey;
+      } else {
+        jsonString = await rootBundle.loadString('assets/service_account.json');
+      }
+    } catch (e) {
+      jsonString = await rootBundle.loadString('assets/service_account.json');
+    }
+
     final accountCredentials =
         ServiceAccountCredentials.fromJson(json.decode(jsonString));
 
-    final client = http.Client();
+    final client = CorsProxyClient(http.Client());
     try {
       _cachedCredentials =
           await obtainAccessCredentialsViaServiceAccount(
@@ -87,22 +100,28 @@ class FcmSenderService {
         },
       };
 
-      final response = await http.post(
-        Uri.parse(_fcmUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: json.encode(payload),
-      );
+      final client = CorsProxyClient(http.Client());
+      try {
+        final response = await client.post(
+          Uri.parse(_fcmUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: json.encode(payload),
+        );
 
-      if (response.statusCode == 200) {
-        print('✅ Push notification sent successfully');
-      } else {
-        print('❌ FCM error ${response.statusCode}: ${response.body}');
+        if (response.statusCode == 200) {
+          print('✅ Push notification sent successfully');
+        } else {
+          throw 'FCM error ${response.statusCode}: ${response.body}';
+        }
+      } finally {
+        client.close();
       }
     } catch (e) {
       print('❌ Error sending push notification: $e');
+      rethrow;
     }
   }
 
@@ -154,5 +173,31 @@ class FcmSenderService {
       print('Error fetching all FCM tokens: $e');
     }
     return tokens;
+  }
+}
+
+/// A custom HTTP client that proxies requests on the Web to bypass CORS restrictions.
+class CorsProxyClient extends http.BaseClient {
+  final http.Client _inner;
+  CorsProxyClient(this._inner);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (kIsWeb) {
+      final originalUrl = request.url.toString();
+      final proxiedUrl = 'https://corsproxy.io/?${Uri.encodeComponent(originalUrl)}';
+      
+      // Consume request stream and fold into a list of bytes
+      final List<int> bytes = await request.finalize().fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+      
+      final newRequest = http.StreamedRequest(request.method, Uri.parse(proxiedUrl));
+      newRequest.headers.addAll(request.headers);
+      
+      newRequest.sink.add(bytes);
+      newRequest.sink.close();
+      
+      return _inner.send(newRequest);
+    }
+    return _inner.send(request);
   }
 }

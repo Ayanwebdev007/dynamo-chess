@@ -54,9 +54,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final TextEditingController _msgBodyController = TextEditingController();
   final TextEditingController _msgImageUrlController = TextEditingController();
   bool _isSendingNotification = false;
+  bool _hasCustomFcmKey = false;
 
   void _onFieldChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _checkCustomFcmKey() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = prefs.getString('fcm_service_account_json');
+      if (mounted) {
+        setState(() {
+          _hasCustomFcmKey = (key != null && key.isNotEmpty && key != '{}');
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -73,6 +86,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _msgTitleController.addListener(_onFieldChanged);
     _msgBodyController.addListener(_onFieldChanged);
     _msgImageUrlController.addListener(_onFieldChanged);
+    _checkCustomFcmKey();
 
     if (!kIsWeb) {
       Future.delayed(Duration.zero, () {
@@ -1897,9 +1911,66 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("SYSTEM MESSAGING & ANNOUNCEMENTS", 
-            style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: Text("SYSTEM MESSAGING & ANNOUNCEMENTS", 
+                  style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 16),
+              ElevatedButton.icon(
+                onPressed: _showFcmKeyConfigDialog,
+                icon: Icon(
+                  _hasCustomFcmKey ? Icons.vpn_key : Icons.vpn_key_outlined,
+                  color: _hasCustomFcmKey ? const Color(0xFFD4AF37) : Colors.redAccent,
+                  size: 16,
+                ),
+                label: Text(
+                  _hasCustomFcmKey ? "KEY CONFIGURATION (ACTIVE)" : "CONFIGURE SERVICE ACCOUNT KEY",
+                  style: TextStyle(
+                    color: _hasCustomFcmKey ? Colors.white : Colors.redAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.03),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: _hasCustomFcmKey ? const Color(0xFFD4AF37).withOpacity(0.3) : Colors.redAccent.withOpacity(0.3),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (!_hasCustomFcmKey) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Direct FCM Push is currently offline. You must configure your Firebase Service Account JSON key using the button above to enable sending announcements and challenge messages from this Web console.",
+                      style: GoogleFonts.montserrat(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
           
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2239,5 +2310,102 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         setState(() => _isSendingNotification = false);
       }
     }
+  }
+
+  void _showFcmKeyConfigDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentKey = prefs.getString('fcm_service_account_json') ?? '';
+    final keyController = TextEditingController(text: currentKey);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFD4AF37)),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.vpn_key, color: Color(0xFFD4AF37)),
+            const SizedBox(width: 12),
+            Text("FCM Credentials Setup", style: GoogleFonts.cinzel(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Paste the content of your service_account.json key below. This key is stored strictly inside your browser's local storage and is never uploaded publicly.",
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: keyController,
+                maxLines: 8,
+                style: GoogleFonts.robotoMono(color: Colors.white, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: '{\n  "type": "service_account",\n  "project_id": "...",\n  ...\n}',
+                  hintStyle: const TextStyle(color: Colors.white10),
+                  filled: true,
+                  fillColor: Colors.black.withOpacity(0.2),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCEL"),
+          ),
+          if (currentKey.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await prefs.remove('fcm_service_account_json');
+                _checkCustomFcmKey();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Custom FCM key cleared. Falling back to default bundle.')),
+                );
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              child: const Text("CLEAR KEY"),
+            ),
+          ElevatedButton(
+            onPressed: () async {
+              final jsonText = keyController.text.trim();
+              if (jsonText.isEmpty) {
+                Navigator.pop(context);
+                return;
+              }
+              // Basic validation check
+              try {
+                final parsed = json.decode(jsonText);
+                if (parsed is! Map || parsed['private_key'] == null) {
+                  throw 'JSON does not appear to be a valid Service Account key (missing private_key)';
+                }
+                await prefs.setString('fcm_service_account_json', jsonText);
+                _checkCustomFcmKey();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('FCM key configured successfully!')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Invalid JSON Key: $e'), backgroundColor: Colors.redAccent),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+            child: const Text("SAVE KEY"),
+          ),
+        ],
+      ),
+    );
   }
 }

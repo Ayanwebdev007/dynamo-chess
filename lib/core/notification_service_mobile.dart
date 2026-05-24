@@ -32,6 +32,19 @@ class NotificationService implements NotificationServiceBase {
     
     await _localNotifications.initialize(initSettings);
 
+    // Create Android Notification Channel
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'dynamo_chess_channel',
+      'Dynamo Chess Notifications',
+      description: 'Notifications for challenges and announcements',
+      importance: Importance.max,
+      playSound: true,
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
     // 3. Get and Save FCM Token
     try {
       String? token = await _fcm.getToken();
@@ -71,11 +84,12 @@ class NotificationService implements NotificationServiceBase {
   @override
   void showNotification(String title, String body) async {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'challenges_channel',
-      'Game Challenges',
-      channelDescription: 'Notifications for new game invitations',
+      'dynamo_chess_channel',
+      'Dynamo Chess Notifications',
+      channelDescription: 'Notifications for challenges and announcements',
       importance: Importance.max,
       priority: Priority.high,
+      playSound: true,
     );
     
     const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
