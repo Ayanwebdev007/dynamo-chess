@@ -31,15 +31,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<Map<dynamic, dynamic>> _liveGames = [];
   List<Map<dynamic, dynamic>> _allUsers = [];
   
+  // Played Games
+  List<Map<String, dynamic>> _playedGames = [];
+  bool _isLoadingPlayedGames = true;
+  DataSnapshot? _gameHistorySnapshot;
+  String _gamesSubTab = 'live'; // 'live' or 'history'
+  
   // Selected User Details
   Map<dynamic, dynamic>? _selectedUser;
   List<Map<String, dynamic>> _userGameHistory = [];
   bool _isFetchingUserHistory = false;
 
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+
   @override
   void initState() {
     super.initState();
     _currentTab = widget.initialTab;
+    _searchController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _searchQuery = _searchController.text;
+        });
+      }
+    });
     if (!kIsWeb) {
       Future.delayed(Duration.zero, () {
         if (mounted) Navigator.of(context).pop();
@@ -49,6 +66,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkLoginStatus() async {
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('isAdminLoggedIn') ?? false)) {
@@ -56,6 +79,108 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } else {
       setState(() => _isLoading = false);
       _fetchAdminData();
+    }
+  }
+
+  String _getUserName(String userId) {
+    if (userId == 'ai') return 'Dynamo AI';
+    if (userId == 'offline_opp') return 'Offline Opponent';
+    final user = _allUsers.firstWhere(
+      (u) => u['uid'] == userId, 
+      orElse: () => <dynamic, dynamic>{}
+    );
+    if (user.containsKey('displayName')) {
+      return user['displayName'].toString();
+    }
+    return 'Player';
+  }
+
+  void _parseGameHistory() {
+    if (_gameHistorySnapshot == null || _gameHistorySnapshot!.value == null) {
+      if (mounted) {
+        setState(() {
+          _playedGames = [];
+          _isLoadingPlayedGames = false;
+        });
+      }
+      return;
+    }
+    
+    try {
+      final Map<dynamic, dynamic> playersHistoryMap = Map<dynamic, dynamic>.from(_gameHistorySnapshot!.value as Map);
+      final Map<String, Map<String, dynamic>> uniqueGames = {};
+
+      playersHistoryMap.forEach((playerId, playerGamesValue) {
+        if (playerGamesValue != null) {
+          final playerGamesMap = Map<dynamic, dynamic>.from(playerGamesValue as Map);
+          playerGamesMap.forEach((gameId, gameValue) {
+            final gameData = Map<dynamic, dynamic>.from(gameValue as Map);
+            final String gId = gameId.toString();
+            
+            final String ownerId = playerId.toString();
+            final String opponentId = (gameData['opponentId'] ?? '').toString();
+            final String opponentName = (gameData['opponent'] ?? 'Unknown').toString();
+            final String myColor = (gameData['myColor'] ?? 'white').toString();
+            
+            String whiteId = '';
+            String blackId = '';
+            if (myColor == 'white') {
+              whiteId = ownerId;
+              blackId = opponentId;
+            } else {
+              whiteId = opponentId;
+              blackId = ownerId;
+            }
+            
+            String whiteName = _getUserName(whiteId);
+            String blackName = _getUserName(blackId);
+            
+            if (whiteName == 'Player') {
+              if (myColor == 'black' && opponentName != 'Unknown') {
+                whiteName = opponentName;
+              }
+            }
+            if (blackName == 'Player') {
+              if (myColor == 'white' && opponentName != 'Unknown') {
+                blackName = opponentName;
+              }
+            }
+            
+            uniqueGames[gId] = {
+              'gameId': gId,
+              'whitePlayerName': whiteName,
+              'whitePlayerId': whiteId,
+              'blackPlayerName': blackName,
+              'blackPlayerId': blackId,
+              'result': gameData['result'] ?? 'draw',
+              'finishedAt': gameData['finishedAt'] ?? 0,
+              'method': gameData['method'] ?? 'unknown',
+              'myColor': myColor,
+              'opponentRating': gameData['opponentRating'] ?? 1200,
+              'isOffline': gId.startsWith('offline_'),
+              'isAI': opponentId == 'ai',
+              'moveHistory': gameData['moveHistory'] ?? {},
+            };
+          });
+        }
+      });
+
+      final List<Map<String, dynamic>> playedList = uniqueGames.values.toList();
+      playedList.sort((a, b) => ((b['finishedAt'] ?? 0) as int).compareTo((a['finishedAt'] ?? 0) as int));
+      
+      if (mounted) {
+        setState(() {
+          _playedGames = playedList;
+          _isLoadingPlayedGames = false;
+        });
+      }
+    } catch (e) {
+      print('Error parsing game history: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingPlayedGames = false;
+        });
+      }
     }
   }
 
@@ -73,6 +198,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ...Map<dynamic, dynamic>.from(e.value)
             }).toList();
           });
+          _parseGameHistory();
         }
       }
     });
@@ -113,6 +239,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         }
       } else {
         if (mounted) setState(() { _activeGames = 0; _liveGames = []; });
+      }
+    });
+
+    db.child('gameHistory').onValue.listen((event) {
+      if (mounted) {
+        setState(() {
+          _gameHistorySnapshot = event.snapshot;
+        });
+        _parseGameHistory();
       }
     });
   }
@@ -176,6 +311,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _buildGamesView();
       case AdminTab.tournaments:
         return _buildTournamentsView();
+      case AdminTab.analytics:
+        return _buildAnalyticsView();
       default:
         return const Center(child: Text("Section under construction", style: TextStyle(color: Colors.white24)));
     }
@@ -204,6 +341,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildUsersView() {
+    final filteredUsers = _allUsers.where((user) {
+      final name = (user['displayName'] ?? '').toString().toLowerCase();
+      final email = (user['email'] ?? '').toString().toLowerCase();
+      final query = _searchQuery.toLowerCase();
+      return name.contains(query) || email.contains(query);
+    }).toList();
+
     return SingleChildScrollView(
       key: const ValueKey('users'),
       padding: const EdgeInsets.all(32),
@@ -221,19 +365,45 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                   child: Row(
                     children: [
                       const Icon(Icons.search, color: Colors.white38),
                       const SizedBox(width: 16),
-                      Text("Search players...", style: GoogleFonts.montserrat(color: Colors.white24)),
-                      const Spacer(),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          style: GoogleFonts.montserrat(color: Colors.white, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: "Search players by name or email...",
+                            hintStyle: GoogleFonts.montserrat(color: Colors.white24, fontSize: 14),
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                      if (_searchQuery.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.white38, size: 20),
+                          onPressed: () => _searchController.clear(),
+                        ),
+                      const SizedBox(width: 16),
                       const Icon(Icons.filter_list, color: Colors.white38),
                     ],
                   ),
                 ),
                 const Divider(height: 1, color: Colors.white12),
-                ..._allUsers.map((user) => _buildUserRow(user)),
+                if (filteredUsers.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        _searchQuery.isEmpty ? "No players registered yet." : "No players found matching '$_searchQuery'.",
+                        style: GoogleFonts.montserrat(color: Colors.white38, fontSize: 14),
+                      ),
+                    ),
+                  )
+                else
+                  ...filteredUsers.map((user) => _buildUserRow(user)),
                 const SizedBox(height: 16),
               ],
             ),
@@ -250,9 +420,382 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("LIVE MATCHES", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              Text(
+                "MATCHES CONTROL", 
+                style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)
+              ),
+              const Spacer(),
+              // Tabs
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.02),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                ),
+                child: Row(
+                  children: [
+                    _buildSubTabButton('live', 'LIVE MATCHES', Icons.sensors),
+                    _buildSubTabButton('history', 'PLAYED HISTORY', Icons.history),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 32),
-          _buildLiveGamesList(),
+          _gamesSubTab == 'live' 
+              ? _buildLiveGamesList() 
+              : _buildPlayedGamesList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubTabButton(String tab, String label, IconData icon) {
+    final isSelected = _gamesSubTab == tab;
+    return InkWell(
+      onTap: () => setState(() => _gamesSubTab = tab),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? const Color(0xFFD4AF37) : Colors.white38, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.montserrat(
+                color: isSelected ? Colors.white : Colors.white38,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayedGamesList() {
+    if (_isLoadingPlayedGames) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(64),
+          child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
+        ),
+      );
+    }
+
+    if (_playedGames.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(48),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.history_toggle_off, size: 64, color: Colors.white.withOpacity(0.1)),
+            const SizedBox(height: 16),
+            Text(
+              "NO PLAYED MATCHES FOUND",
+              style: GoogleFonts.cinzel(color: Colors.white38, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Played games history will appear here once players complete matches.",
+              style: GoogleFonts.montserrat(color: Colors.white24, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Group games by date
+    final Map<String, List<Map<String, dynamic>>> groupedGames = {};
+    for (var game in _playedGames) {
+      final finishedAt = game['finishedAt'] as int? ?? 0;
+      if (finishedAt == 0) continue;
+      final date = DateTime.fromMillisecondsSinceEpoch(finishedAt);
+      final dateStr = _formatGroupDate(date);
+      if (!groupedGames.containsKey(dateStr)) {
+        groupedGames[dateStr] = [];
+      }
+      groupedGames[dateStr]!.add(game);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: groupedGames.entries.map((entry) {
+        final String dateStr = entry.key;
+        final List<Map<String, dynamic>> games = entry.value;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 16, top: 16),
+              child: Text(
+                dateStr.toUpperCase(),
+                style: GoogleFonts.cinzel(
+                  color: const Color(0xFFD4AF37).withOpacity(0.8),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: games.length,
+                separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.white12),
+                itemBuilder: (context, index) {
+                  final game = games[index];
+                  return _buildPlayedGameTile(game);
+                },
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  String _formatGroupDate(DateTime date) {
+    final List<String> months = [
+      'January', 'February', 'March', 'April', 'May', 'June', 
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final List<String> weekdays = [
+      'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+    ];
+    
+    final dayOfWeek = weekdays[date.weekday % 7];
+    final month = months[date.month - 1];
+    return "$dayOfWeek, $month ${date.day}, ${date.year}";
+  }
+
+  Widget _buildPlayedGameTile(Map<String, dynamic> game) {
+    final finishedAt = game['finishedAt'] as int? ?? 0;
+    final date = DateTime.fromMillisecondsSinceEpoch(finishedAt);
+    final timeStr = "${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}";
+
+    final whiteName = game['whitePlayerName'] ?? 'Unknown';
+    final blackName = game['blackPlayerName'] ?? 'Unknown';
+    
+    final result = game['result'] ?? 'draw';
+    final myColor = game['myColor'] ?? 'white';
+    
+    String resultText = 'Draw';
+    Color resultColor = Colors.white54;
+    
+    if (result == 'win') {
+      resultText = myColor == 'white' ? 'White Won' : 'Black Won';
+      resultColor = const Color(0xFFD4AF37); // Gold
+    } else if (result == 'loss') {
+      resultText = myColor == 'white' ? 'Black Won' : 'White Won';
+      resultColor = const Color(0xFFD4AF37); // Gold
+    }
+
+    final method = game['method']?.toString().toUpperCase() ?? 'COMPLETED';
+
+    // Game type details
+    String typeText = 'ONLINE';
+    Color typeColor = const Color(0xFFD4AF37);
+    IconData typeIcon = Icons.wifi;
+
+    if (game['isOffline'] == true) {
+      typeText = 'OFFLINE';
+      typeColor = Colors.white38;
+      typeIcon = Icons.wifi_off;
+    } else if (game['isAI'] == true) {
+      typeText = 'VS AI';
+      typeColor = Colors.purpleAccent;
+      typeIcon = Icons.smart_toy;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Row(
+        children: [
+          // Time info
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                timeStr,
+                style: GoogleFonts.montserrat(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(typeIcon, color: typeColor.withOpacity(0.6), size: 10),
+                  const SizedBox(width: 4),
+                  Text(
+                    typeText,
+                    style: GoogleFonts.montserrat(
+                      color: typeColor,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(width: 32),
+          // Players
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                // White player
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        whiteName,
+                        style: GoogleFonts.montserrat(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        "WHITE",
+                        style: GoogleFonts.montserrat(
+                          color: Colors.white38,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // VS Divider
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    "VS",
+                    style: GoogleFonts.cinzel(
+                      color: const Color(0xFFD4AF37).withOpacity(0.5),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                // Black player
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        blackName,
+                        style: GoogleFonts.montserrat(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        "BLACK",
+                        style: GoogleFonts.montserrat(
+                          color: Colors.white38,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          // Result
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  resultText.toUpperCase(),
+                  style: GoogleFonts.montserrat(
+                    color: resultColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  method,
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white24,
+                    fontSize: 9,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Review button
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => GameReviewScreen(
+                    gameData: game,
+                    opponentName: blackName,
+                    myColor: 'white',
+                    whitePlayerName: whiteName,
+                    blackPlayerName: blackName,
+                  ),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+              foregroundColor: const Color(0xFFD4AF37),
+              minimumSize: const Size(80, 32),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.2)),
+              ),
+            ),
+            child: Text(
+              "REVIEW",
+              style: GoogleFonts.montserrat(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -840,12 +1383,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           const SizedBox(height: 24),
           Row(
             children: [
-              if (t.status == TournamentStatus.enrolling)
-                ElevatedButton(
-                  onPressed: () => _tournamentService.pairNextRound(t.id),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green.withOpacity(0.1), foregroundColor: Colors.green),
-                  child: const Text("START TOURNAMENT (ROUND 1)"),
-                ),
               if (t.status == TournamentStatus.active)
                 ElevatedButton(
                   onPressed: () => _tournamentService.pairNextRound(t.id),
@@ -1102,6 +1639,230 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsView() {
+    // 1. Match Outcomes
+    int whiteWins = 0;
+    int blackWins = 0;
+    int draws = 0;
+    int checkmates = 0;
+    int timeouts = 0;
+    int resignations = 0;
+    
+    for (var game in _playedGames) {
+      final result = game['result']?.toString() ?? '';
+      final method = game['method']?.toString().toLowerCase() ?? '';
+      
+      if (result == 'win') {
+        if (game['myColor'] == 'white') whiteWins++; else blackWins++;
+      } else if (result == 'loss') {
+        if (game['myColor'] == 'white') blackWins++; else whiteWins++;
+      } else {
+        draws++;
+      }
+      
+      if (method.contains('checkmate')) checkmates++;
+      else if (method.contains('time') || method.contains('abandon')) timeouts++;
+      else if (method.contains('resign')) resignations++;
+    }
+    
+    final totalFinished = whiteWins + blackWins + draws;
+    final totalMethods = checkmates + timeouts + resignations;
+
+    // 2. Rating Distribution
+    final Map<String, int> ratingBuckets = {
+      '< 1000': 0,
+      '1000 - 1200': 0,
+      '1200 - 1400': 0,
+      '1400 - 1600': 0,
+      '1600+': 0,
+    };
+    
+    for (var u in _allUsers) {
+      final rating = (u['stats']?['rating'] ?? 1200) as int;
+      if (rating < 1000) ratingBuckets['< 1000'] = ratingBuckets['< 1000']! + 1;
+      else if (rating < 1200) ratingBuckets['1000 - 1200'] = ratingBuckets['1000 - 1200']! + 1;
+      else if (rating < 1400) ratingBuckets['1200 - 1400'] = ratingBuckets['1200 - 1400']! + 1;
+      else if (rating < 1600) ratingBuckets['1400 - 1600'] = ratingBuckets['1400 - 1600']! + 1;
+      else ratingBuckets['1600+'] = ratingBuckets['1600+']! + 1;
+    }
+    int maxBucket = 1;
+    for (var val in ratingBuckets.values) {
+      if (val > maxBucket) maxBucket = val;
+    }
+
+    // 3. Leaderboard
+    final sortedUsers = List<Map<dynamic, dynamic>>.from(_allUsers);
+    sortedUsers.sort((a, b) => ((b['stats']?['rating'] ?? 1200) as int).compareTo((a['stats']?['rating'] ?? 1200) as int));
+    final topUsers = sortedUsers.take(5).toList();
+
+    return SingleChildScrollView(
+      key: const ValueKey('analytics'),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("PLATFORM ANALYTICS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 32),
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left Column (Charts)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    _buildAnalyticsCard(
+                      title: "MATCH OUTCOMES",
+                      child: Column(
+                        children: [
+                          _buildHorizontalBar("White Wins", whiteWins, totalFinished, Colors.white),
+                          const SizedBox(height: 12),
+                          _buildHorizontalBar("Black Wins", blackWins, totalFinished, Colors.grey.shade800),
+                          const SizedBox(height: 12),
+                          _buildHorizontalBar("Draws", draws, totalFinished, Colors.blueGrey),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildAnalyticsCard(
+                      title: "VICTORY METHODS",
+                      child: Column(
+                        children: [
+                          _buildHorizontalBar("Checkmate", checkmates, totalMethods, Colors.redAccent),
+                          const SizedBox(height: 12),
+                          _buildHorizontalBar("Resignation", resignations, totalMethods, Colors.orangeAccent),
+                          const SizedBox(height: 12),
+                          _buildHorizontalBar("Timeout", timeouts, totalMethods, Colors.purpleAccent),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
+              // Right Column (Histogram & Leaderboard)
+              Expanded(
+                flex: 3,
+                child: Column(
+                  children: [
+                    _buildAnalyticsCard(
+                      title: "RATING DISTRIBUTION",
+                      child: SizedBox(
+                        height: 200,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: ratingBuckets.entries.map((e) => _buildVerticalBar(e.key, e.value, maxBucket)).toList(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildAnalyticsCard(
+                      title: "GLOBAL LEADERBOARD (TOP 5)",
+                      child: Column(
+                        children: topUsers.map((u) => _buildLeaderboardRow(u)).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsCard({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorizontalBar(String label, int count, int total, Color color) {
+    final double pct = total == 0 ? 0 : count / total;
+    return Row(
+      children: [
+        SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+        Expanded(
+          child: Stack(
+            children: [
+              Container(height: 12, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(6))),
+              FractionallySizedBox(
+                widthFactor: pct,
+                child: Container(
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8)],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        SizedBox(width: 40, child: Text("$count", textAlign: TextAlign.right, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+      ],
+    );
+  }
+
+  Widget _buildVerticalBar(String label, int count, int maxCount) {
+    final double pct = maxCount == 0 ? 0 : count / maxCount;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Text("$count", style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Container(
+          width: 40,
+          height: 140 * pct,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Color(0xFFD4AF37), Colors.orangeAccent]),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: [BoxShadow(color: const Color(0xFFD4AF37).withOpacity(0.3), blurRadius: 8)],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+      ],
+    );
+  }
+
+  Widget _buildLeaderboardRow(Map<dynamic, dynamic> user) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: const Color(0xFFD4AF37).withOpacity(0.1),
+            radius: 16,
+            child: Text(user['displayName']?.substring(0, 1).toUpperCase() ?? "U", 
+              style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+          const SizedBox(width: 16),
+          Expanded(child: Text(user['displayName'] ?? "Player", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+          Text("${user['stats']?['rating'] ?? 1200}", style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 16)),
         ],
       ),
     );

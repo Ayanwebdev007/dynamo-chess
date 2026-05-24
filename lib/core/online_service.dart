@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/models.dart';
+import '../core/fcm_sender_service.dart';
 
 class OnlineService {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
@@ -601,6 +602,22 @@ class OnlineService {
       });
       
       print('📨 Invitation sent! ID: $inviteId');
+
+      // Send push notification to the invited player
+      try {
+        final fcmToken = await FcmSenderService.getUserFcmToken(targetUser['uid']);
+        if (fcmToken != null) {
+          await FcmSenderService.sendToToken(
+            token: fcmToken,
+            title: 'New Challenge! ♟️',
+            body: '$fromUserName invited you to a game!',
+            data: {'type': 'invitation', 'roomId': roomId},
+          );
+        }
+      } catch (pushError) {
+        print('Push notification error (non-fatal): $pushError');
+      }
+
       return inviteId;
     } catch (e) {
       print('ERROR sending invitation: $e');
@@ -748,6 +765,20 @@ class OnlineService {
       'timestamp': ServerValue.timestamp,
       'expiresAt': DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch,
     });
+
+    // Send push notification to all users
+    try {
+      final tokens = await FcmSenderService.getAllFcmTokens();
+      if (tokens.isNotEmpty) {
+        await FcmSenderService.sendToMultiple(
+          tokens: tokens,
+          title: 'Announcement from $adminName',
+          body: message,
+        );
+      }
+    } catch (pushError) {
+      print('Broadcast push error (non-fatal): $pushError');
+    }
   }
 
   /// Listen for recent broadcasts

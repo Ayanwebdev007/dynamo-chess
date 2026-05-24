@@ -18,6 +18,8 @@ dependencies:
   firebase_messaging: ^16.1.1
   flutter_local_notifications: ^18.0.1
   shared_preferences: ^2.2.2
+  googleapis_auth: ^1.4.1
+  http: ^1.2.1
 
 dev_dependencies:
   flutter_test:
@@ -37,6 +39,7 @@ flutter:
     - assets/dynamo_logo.png
     - assets/noflag.png
     - assets/inflag.png
+    - assets/service_account.json
     - assets/pieces/
     - assets/pieces/king_w.png
     - assets/pieces/king_b.png

@@ -8,12 +8,16 @@ class GameReviewScreen extends StatefulWidget {
   final Map<String, dynamic> gameData;
   final String opponentName;
   final String myColor;
+  final String? whitePlayerName;
+  final String? blackPlayerName;
 
   const GameReviewScreen({
     super.key,
     required this.gameData,
     required this.opponentName,
     required this.myColor,
+    this.whitePlayerName,
+    this.blackPlayerName,
   });
 
   @override
@@ -87,7 +91,7 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
                       constraints: const BoxConstraints(maxWidth: 1200),
                       child: Row(
                         children: [
-                          Expanded(flex: 3, child: _buildBoard(board)),
+                          Expanded(flex: 3, child: Center(child: _buildBoard(board))),
                           const SizedBox(width: 32),
                           Expanded(flex: 2, child: _buildMoveHistoryList(isMobile: false)),
                         ],
@@ -126,6 +130,9 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
 
   Widget _buildMatchHeader({required bool isMobile}) {
     final result = widget.gameData['result']?.toUpperCase() ?? "COMPLETED";
+    final wName = widget.whitePlayerName ?? (widget.myColor == 'white' ? "YOU" : widget.opponentName);
+    final bName = widget.blackPlayerName ?? (widget.myColor == 'white' ? widget.opponentName : "YOU");
+    final method = widget.gameData['method']?.toString().toUpperCase() ?? "COMPLETED";
     
     return Container(
       padding: EdgeInsets.all(isMobile ? 12 : 20),
@@ -136,17 +143,17 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildPlayerInfo(widget.myColor == 'white' ? "YOU" : widget.opponentName, widget.myColor == 'white' ? PlayerColor.white : PlayerColor.black, isMobile),
+          _buildPlayerInfo(wName, PlayerColor.white, isMobile),
           Padding(
             padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 40),
             child: Column(
               children: [
                 Text(result, style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: isMobile ? 14 : 18)),
-                Text("RESIGNATION", style: GoogleFonts.montserrat(color: Colors.white24, fontSize: 8, letterSpacing: 1.2)),
+                Text(method, style: GoogleFonts.montserrat(color: Colors.white24, fontSize: 8, letterSpacing: 1.2)),
               ],
             ),
           ),
-          _buildPlayerInfo(widget.myColor == 'white' ? widget.opponentName : "YOU", widget.myColor == 'white' ? PlayerColor.black : PlayerColor.white, isMobile),
+          _buildPlayerInfo(bName, PlayerColor.black, isMobile),
         ],
       ),
     );
@@ -158,7 +165,7 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
         CircleAvatar(
           radius: isMobile ? 14 : 20,
           backgroundColor: color == PlayerColor.white ? Colors.white10 : Colors.black,
-          child: Text(name.substring(0, 1).toUpperCase(), style: TextStyle(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: isMobile ? 10 : 14)),
+          child: Text(name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?", style: TextStyle(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: isMobile ? 10 : 14)),
         ),
         const SizedBox(height: 4),
         Text(name, style: GoogleFonts.montserrat(color: Colors.white70, fontSize: isMobile ? 9 : 12, fontWeight: FontWeight.w600)),
