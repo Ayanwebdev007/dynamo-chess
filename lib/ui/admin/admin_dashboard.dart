@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/online_service.dart';
+import '../../core/fcm_sender_service.dart';
 import '../platform_asset_image.dart';
 import '../game_review_screen.dart';
 import '../../core/tournament_service.dart';
@@ -46,6 +47,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
+  // System Messaging State
+  String _messagingTarget = 'all'; // 'all' or 'specific'
+  String? _selectedMessagingUserUid;
+  final TextEditingController _msgTitleController = TextEditingController(text: 'Dynamo Chess Update ♟️');
+  final TextEditingController _msgBodyController = TextEditingController();
+  final TextEditingController _msgImageUrlController = TextEditingController();
+  bool _isSendingNotification = false;
+
+  void _onFieldChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +70,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         });
       }
     });
+    _msgTitleController.addListener(_onFieldChanged);
+    _msgBodyController.addListener(_onFieldChanged);
+    _msgImageUrlController.addListener(_onFieldChanged);
+
     if (!kIsWeb) {
       Future.delayed(Duration.zero, () {
         if (mounted) Navigator.of(context).pop();
@@ -69,6 +86,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _msgTitleController.dispose();
+    _msgBodyController.dispose();
+    _msgImageUrlController.dispose();
     super.dispose();
   }
 
@@ -313,6 +333,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _buildTournamentsView();
       case AdminTab.analytics:
         return _buildAnalyticsView();
+      case AdminTab.settings:
+        return _buildMessagingView();
       default:
         return const Center(child: Text("Section under construction", style: TextStyle(color: Colors.white24)));
     }
@@ -1084,7 +1106,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _buildSidebarItem(Icons.sports_esports_outlined, "Games", _currentTab == AdminTab.games, () => setState(() => _currentTab = AdminTab.games)),
           _buildSidebarItem(Icons.emoji_events_outlined, "Tournaments", _currentTab == AdminTab.tournaments, () => setState(() => _currentTab = AdminTab.tournaments)),
           _buildSidebarItem(Icons.analytics_outlined, "Analytics", _currentTab == AdminTab.analytics, () => setState(() => _currentTab = AdminTab.analytics)),
-          _buildSidebarItem(Icons.settings_outlined, "System Config", _currentTab == AdminTab.settings, () => setState(() => _currentTab = AdminTab.settings)),
+          _buildSidebarItem(Icons.settings_outlined, "System Messaging", _currentTab == AdminTab.settings, () => setState(() => _currentTab = AdminTab.settings)),
           const Spacer(),
           _buildSidebarItem(Icons.logout, "Exit Panel", false, () => Navigator.of(context).pushReplacementNamed('/')),
           const SizedBox(height: 20),
@@ -1866,5 +1888,356 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildMessagingView() {
+    return SingleChildScrollView(
+      key: const ValueKey('messaging'),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("SYSTEM MESSAGING & ANNOUNCEMENTS", 
+            style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 32),
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left Column (Controls)
+              Expanded(
+                flex: 3,
+                child: Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Notification Scope", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 14, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          _buildScopeOption('all', 'Broadcast to All Players', Icons.campaign_outlined),
+                          const SizedBox(width: 16),
+                          _buildScopeOption('specific', 'Direct to Player', Icons.person_search_outlined),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      if (_messagingTarget == 'specific') ...[
+                        const Text("Select Recipient", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              dropdownColor: const Color(0xFF1E1E1E),
+                              value: _selectedMessagingUserUid,
+                              hint: const Text("Select a player...", style: TextStyle(color: Colors.white24)),
+                              isExpanded: true,
+                              style: const TextStyle(color: Colors.white),
+                              items: _allUsers.map((user) {
+                                return DropdownMenuItem<String>(
+                                  value: user['uid'].toString(),
+                                  child: Text("${user['displayName'] ?? 'Player'} (${user['email'] ?? 'No email'})"),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedMessagingUserUid = val;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                      _buildAdminTextField(_msgTitleController, "Notification Title", "e.g. New Tournament Starting!"),
+                      _buildAdminTextField(_msgBodyController, "Notification Message", "Enter main message content...", maxLines: 4),
+                      _buildAdminTextField(_msgImageUrlController, "Optional Image URL", "e.g. https://domain.com/image.png"),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSendingNotification ? null : _sendSystemNotification,
+                          icon: _isSendingNotification 
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                              : const Icon(Icons.send_outlined, size: 18),
+                          label: Text(_isSendingNotification ? "SENDING..." : "DISPATCH NOTIFICATION"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4AF37),
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            textStyle: GoogleFonts.montserrat(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 32),
+              // Right Column (Mock Preview)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("LIVE PUSH PREVIEW", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 14, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 20),
+                    _buildMockNotificationPreview(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScopeOption(String scope, String label, IconData icon) {
+    final isSelected = _messagingTarget == scope;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _messagingTarget = scope;
+            if (scope == 'all') {
+              _selectedMessagingUserUid = null;
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.08) : Colors.white.withOpacity(0.02),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.3) : Colors.white.withOpacity(0.05),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: isSelected ? const Color(0xFFD4AF37) : Colors.white38, size: 18),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: GoogleFonts.montserrat(
+                  color: isSelected ? Colors.white : Colors.white60,
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMockNotificationPreview() {
+    final title = _msgTitleController.text.isEmpty ? "Notification Title" : _msgTitleController.text;
+    final body = _msgBodyController.text.isEmpty ? "Notification body text goes here..." : _msgBodyController.text;
+    final imageUrl = _msgImageUrlController.text.trim();
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Phone Status Bar mock
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("12:00", style: GoogleFonts.montserrat(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+                Row(
+                  children: const [
+                    Icon(Icons.wifi, color: Colors.white70, size: 10),
+                    SizedBox(width: 4),
+                    Icon(Icons.signal_cellular_4_bar, color: Colors.white70, size: 10),
+                    SizedBox(width: 4),
+                    Icon(Icons.battery_std, color: Colors.white70, size: 10),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // App banner mock
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Image.asset('assets/dynamo_logo.png', width: 20, height: 20, errorBuilder: (context, error, stackTrace) => Container(color: const Color(0xFFD4AF37), width: 20, height: 20, child: const Icon(Icons.star, size: 12, color: Colors.black))),
+                const SizedBox(width: 8),
+                Text("DYNAMO CHESS", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const Spacer(),
+                const Text("now", style: TextStyle(color: Colors.white24, fontSize: 10)),
+              ],
+            ),
+          ),
+          // Notification Content
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.montserrat(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  body,
+                  style: GoogleFonts.montserrat(color: Colors.white70, fontSize: 12),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          // Image Preview if provided
+          if (imageUrl.isNotEmpty && Uri.tryParse(imageUrl)?.hasAbsolutePath == true) ...[
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: Colors.white.withOpacity(0.02),
+                        child: const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37), strokeWidth: 2)),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.red.withOpacity(0.05),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.broken_image_outlined, color: Colors.redAccent, size: 32),
+                            const SizedBox(height: 8),
+                            Text("Could not load image URL", style: GoogleFonts.montserrat(color: Colors.redAccent.withOpacity(0.8), fontSize: 10)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ] else
+            const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendSystemNotification() async {
+    final title = _msgTitleController.text.trim();
+    final body = _msgBodyController.text.trim();
+    final imageUrl = _msgImageUrlController.text.trim().isEmpty ? null : _msgImageUrlController.text.trim();
+
+    if (title.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill out both Title and Message body.')),
+      );
+      return;
+    }
+
+    if (_messagingTarget == 'specific' && _selectedMessagingUserUid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a player to receive this notification.')),
+      );
+      return;
+    }
+
+    setState(() => _isSendingNotification = true);
+
+    try {
+      if (_messagingTarget == 'all') {
+        // Broadcast notification
+        await _onlineService.sendGlobalBroadcast(body, "Admin", imageUrl: imageUrl);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Global announcement broadcast successfully!')),
+          );
+        }
+      } else {
+        // Send to specific user
+        final recipientUid = _selectedMessagingUserUid!;
+        final token = await FcmSenderService.getUserFcmToken(recipientUid);
+        
+        if (token == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Recipient does not have a registered push token.')),
+            );
+          }
+        } else {
+          await FcmSenderService.sendToToken(
+            token: token,
+            title: title,
+            body: body,
+            imageUrl: imageUrl,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Direct notification dispatched successfully!')),
+            );
+          }
+        }
+      }
+
+      // Reset body and image
+      if (mounted) {
+        setState(() {
+          _msgBodyController.clear();
+          _msgImageUrlController.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to dispatch notification: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingNotification = false);
+      }
+    }
   }
 }

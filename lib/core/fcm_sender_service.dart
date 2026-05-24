@@ -51,6 +51,7 @@ class FcmSenderService {
     required String token,
     required String title,
     required String body,
+    String? imageUrl,
     Map<String, String>? data,
   }) async {
     try {
@@ -62,6 +63,7 @@ class FcmSenderService {
           'notification': {
             'title': title,
             'body': body,
+            if (imageUrl != null && imageUrl.isNotEmpty) 'image': imageUrl,
           },
           'data': data ?? {},
           'android': {
@@ -69,6 +71,17 @@ class FcmSenderService {
             'notification': {
               'channel_id': 'dynamo_chess_channel',
               'sound': 'default',
+              if (imageUrl != null && imageUrl.isNotEmpty) 'image': imageUrl,
+            },
+          },
+          'apns': {
+            'payload': {
+              'aps': {
+                'mutable-content': 1,
+              },
+            },
+            'fcm_options': {
+              if (imageUrl != null && imageUrl.isNotEmpty) 'image': imageUrl,
             },
           },
         },
@@ -98,9 +111,10 @@ class FcmSenderService {
     required List<String> tokens,
     required String title,
     required String body,
+    String? imageUrl,
   }) async {
     for (final token in tokens) {
-      await sendToToken(token: token, title: title, body: body);
+      await sendToToken(token: token, title: title, body: body, imageUrl: imageUrl);
     }
   }
 

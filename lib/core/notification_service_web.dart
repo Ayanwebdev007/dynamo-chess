@@ -22,4 +22,9 @@ class NotificationService implements NotificationServiceBase {
       html.Notification(title, body: body);
     }
   }
+
+  @override
+  Future<void> saveTokenForUser(String userId) async {
+    // No-op on web
+  }
 }

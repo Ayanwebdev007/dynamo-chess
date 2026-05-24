@@ -68,14 +68,6 @@ void main() async {
   }
   
   try {
-    AudioService().init();
-    NotificationService().init();
-    debugPrint('✅ Audio service initialized');
-  } catch (e) {
-    debugPrint('❌ Audio service init failed: $e');
-  }
-  
-  try {
     debugPrint('🔥 Initializing Firebase...');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -83,6 +75,14 @@ void main() async {
     debugPrint('✅ Firebase initialized');
   } catch (e) {
     debugPrint('❌ Firebase init failed: $e');
+  }
+
+  try {
+    AudioService().init();
+    await NotificationService().init();
+    debugPrint('✅ Audio & Notification services initialized');
+  } catch (e) {
+    debugPrint('❌ Audio/Notification service init failed: $e');
   }
   
   runApp(const DynamoChessApp());

@@ -757,13 +757,14 @@ class OnlineService {
   // --- GLOBAL BROADCAST SYSTEM ---
 
   /// Send a message to all online users
-  Future<void> sendGlobalBroadcast(String message, String adminName) async {
+  Future<void> sendGlobalBroadcast(String message, String adminName, {String? imageUrl}) async {
     final broadcastRef = _db.child('broadcasts').push();
     await broadcastRef.set({
       'message': message,
       'admin': adminName,
       'timestamp': ServerValue.timestamp,
       'expiresAt': DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch,
+      if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
     });
 
     // Send push notification to all users
@@ -774,6 +775,7 @@ class OnlineService {
           tokens: tokens,
           title: 'Announcement from $adminName',
           body: message,
+          imageUrl: imageUrl,
         );
       }
     } catch (pushError) {

@@ -50,6 +50,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         });
         if (user != null) {
           _setupInvitationListener(user.uid);
+          NotificationService().saveTokenForUser(user.uid);
         } else {
           _invitationListener?.cancel();
           _invitationListener = null;

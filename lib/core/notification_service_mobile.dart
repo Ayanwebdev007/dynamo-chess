@@ -45,6 +45,18 @@ class NotificationService implements NotificationServiceBase {
       print("Error saving FCM token: $e");
     }
 
+    // Listen for FCM token refreshes and update them in database
+    _fcm.onTokenRefresh.listen((token) async {
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await OnlineService().saveFcmToken(user.uid, token);
+        }
+      } catch (e) {
+        print("Error saving refreshed FCM token: $e");
+      }
+    });
+
     // 4. Listen for foreground FCM messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
@@ -74,5 +86,18 @@ class NotificationService implements NotificationServiceBase {
       body,
       platformDetails,
     );
+  }
+
+  @override
+  Future<void> saveTokenForUser(String userId) async {
+    try {
+      String? token = await _fcm.getToken();
+      if (token != null) {
+        await OnlineService().saveFcmToken(userId, token);
+        print("✅ FCM Token saved for user: $userId");
+      }
+    } catch (e) {
+      print("❌ Error saving FCM token for user $userId: $e");
+    }
   }
 }
