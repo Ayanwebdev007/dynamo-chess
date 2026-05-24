@@ -185,18 +185,43 @@ class CorsProxyClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (kIsWeb) {
       final originalUrl = request.url.toString();
-      final proxiedUrl = 'https://corsproxy.io/?${Uri.encodeComponent(originalUrl)}';
-      
       // Consume request stream and fold into a list of bytes
       final List<int> bytes = await request.finalize().fold<List<int>>(<int>[], (a, b) => a..addAll(b));
-      
-      final newRequest = http.StreamedRequest(request.method, Uri.parse(proxiedUrl));
-      newRequest.headers.addAll(request.headers);
-      
-      newRequest.sink.add(bytes);
-      newRequest.sink.close();
-      
-      return _inner.send(newRequest);
+
+      final List<String> proxyTemplates = [
+        'https://api.cors.lol/?url=',
+        'https://proxy.corsfix.com/?url=',
+        'https://corsproxy.io/?',
+      ];
+
+      Object? lastError;
+      http.StreamedResponse? lastResponse;
+
+      for (final template in proxyTemplates) {
+        try {
+          final proxiedUrl = '$template${Uri.encodeComponent(originalUrl)}';
+          final newRequest = http.StreamedRequest(request.method, Uri.parse(proxiedUrl));
+          newRequest.headers.addAll(request.headers);
+          newRequest.sink.add(bytes);
+          newRequest.sink.close();
+
+          final response = await _inner.send(newRequest);
+          if (response.statusCode < 400) {
+            return response;
+          }
+          lastResponse = response;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+
+      if (lastResponse != null) {
+        return lastResponse;
+      }
+      if (lastError != null) {
+        throw lastError;
+      }
+      throw http.ClientException('Failed to send request via any CORS proxy', request.url);
     }
     return _inner.send(request);
   }
