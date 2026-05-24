@@ -189,6 +189,7 @@ class CorsProxyClient extends http.BaseClient {
       final List<int> bytes = await request.finalize().fold<List<int>>(<int>[], (a, b) => a..addAll(b));
 
       final List<String> proxyTemplates = [
+        '', // Direct connection (succeeds instantly if CORS bypass extension is enabled)
         'https://api.cors.lol/?url=',
         'https://proxy.corsfix.com/?url=',
         'https://corsproxy.io/?',
@@ -199,7 +200,7 @@ class CorsProxyClient extends http.BaseClient {
 
       for (final template in proxyTemplates) {
         try {
-          final proxiedUrl = '$template${Uri.encodeComponent(originalUrl)}';
+          final proxiedUrl = template.isEmpty ? originalUrl : '$template${Uri.encodeComponent(originalUrl)}';
           final newRequest = http.StreamedRequest(request.method, Uri.parse(proxiedUrl));
           newRequest.headers.addAll(request.headers);
           newRequest.sink.add(bytes);
