@@ -170,27 +170,48 @@ class TournamentService {
         }
       }
 
-      // Safety: Only proceed if the round is actually completed and has matches
-      if (currentRound.isCompleted && currentRound.matches.isNotEmpty) {
+      // Safety: Only proceed if the round is actually completed and has real (non-BYE) matches
+      // Also verify ALL matches are completed, not just the round flag (defense against stale data)
+      final hasUncompletedRealMatches = currentRound.matches.any(
+        (m) => !m.isCompleted && m.blackPlayerId != 'BYE',
+      );
+      if (currentRound.isCompleted && currentRound.matches.isNotEmpty && !hasUncompletedRealMatches) {
         // ONLY set next event if we haven't reached the end
         if (t.currentRound < t.totalRounds) {
           // Use a round-specific lock to prevent double timer setting
           if (t.nextEventAt == null && t.restTimerSetForRound != t.currentRound) {
-            // Set timer for next round (rest period)
-            print('🤖 AUTO: Round ${t.currentRound} finished. Setting rest timer.');
-            final nextTime = now.add(const Duration(seconds: 30));
-            await _db.child('tournaments').child(t.id).update({
-              'nextEventAt': nextTime.millisecondsSinceEpoch,
-              'restTimerSetForRound': t.currentRound,
+            // Use a transaction to atomically set the rest timer,
+            // preventing multiple clients from setting it simultaneously
+            final timerRef = _db.child('tournaments').child(t.id).child('restTimerSetForRound');
+            final timerResult = await timerRef.runTransaction((Object? currentVal) {
+              // Only set timer if no other client has set it for this round
+              if (currentVal != null && currentVal is num && currentVal.toInt() == t.currentRound) {
+                return Transaction.abort(); // Another client already set it
+              }
+              return Transaction.success(t.currentRound);
             });
+
+            if (timerResult.committed) {
+              print('🤖 AUTO: Round ${t.currentRound} finished. Setting rest timer.');
+              final nextTime = now.add(const Duration(seconds: 30));
+              await _db.child('tournaments').child(t.id).update({
+                'nextEventAt': nextTime.millisecondsSinceEpoch,
+              });
+            }
           } else if (t.nextEventAt != null && now.isAfter(t.nextEventAt!)) {
             if (_activeAutomations.contains(t.id)) return;
             
             _activeAutomations.add(t.id);
             print('🤖 AUTO: Triggering Next Round (${t.currentRound + 1}) for ${t.id}');
             try {
-              // CRITICAL: Clear timer first to avoid double pairing
-              await _db.child('tournaments').child(t.id).update({'nextEventAt': null});
+              // Clear the timer. We do NOT pre-set restTimerSetForRound here,
+              // because the newly created round has isCompleted=false (set in pairNextRound),
+              // which prevents the automation from immediately treating it as completed.
+              // Pre-setting restTimerSetForRound to nextRound would block the timer
+              // from being set when that round ACTUALLY completes later.
+              await _db.child('tournaments').child(t.id).update({
+                'nextEventAt': null,
+              });
               await pairNextRound(t.id);
             } catch (e) {
               print('❌ AUTO ERROR: Next round failed for ${t.id}: $e');
@@ -466,7 +487,15 @@ class TournamentService {
       
       // 2. Handle BYE if odd number of participants
       if (unassigned.length % 2 != 0) {
-        final byePlayer = unassigned.removeLast();
+        // Find the lowest ranked player who HAS NOT yet received a BYE
+        int byeIndex = unassigned.length - 1;
+        for (int i = unassigned.length - 1; i >= 0; i--) {
+          if (!unassigned[i].opponents.contains("BYE")) {
+            byeIndex = i;
+            break;
+          }
+        }
+        final byePlayer = unassigned.removeAt(byeIndex);
         
         print('🤖 AUTO: Assigning BYE to ${byePlayer.name}');
         
