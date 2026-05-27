@@ -401,8 +401,8 @@ class _BoardScreenState extends State<BoardScreen> {
             if (fWhiteTime != null) _gameState.whiteTime = Duration(seconds: fWhiteTime.toInt());
             if (fBlackTime != null) _gameState.blackTime = Duration(seconds: fBlackTime.toInt());
             
-            // Compensate for time that passed since the last move
-            final lastMoveTs = data['lastMoveTimestamp'];
+            // Compensate for time that passed since the last move (or match start)
+            final lastMoveTs = data['lastMoveTimestamp'] ?? data['createdAt'];
             if (lastMoveTs != null && status == 'playing') {
               final lastMoveTime = DateTime.fromMillisecondsSinceEpoch((lastMoveTs as num).toInt());
               final elapsed = DateTime.now().difference(lastMoveTime);
