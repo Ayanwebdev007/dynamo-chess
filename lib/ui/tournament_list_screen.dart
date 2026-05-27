@@ -17,20 +17,15 @@ class TournamentListScreen extends StatefulWidget {
 class _TournamentListScreenState extends State<TournamentListScreen> {
   final TournamentService _service = TournamentService();
   Stream<List<Tournament>>? _tournamentStream;
-  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _tournamentStream = _service.streamTournaments();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -69,18 +64,6 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBackground() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(-0.5, -0.5),
-          radius: 1.5,
-          colors: [Color(0xFF142B16), Color(0xFF0A0E0A)],
         ),
       ),
     );

@@ -20,8 +20,9 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
   final TournamentService _service = TournamentService();
   late TabController _tabController;
   Stream<Tournament?>? _tournamentStream;
+  StreamSubscription<Tournament?>? _tournamentSubscription;
   String? _lastDeployedMatchId;
-  Timer? _refreshTimer;
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -29,7 +30,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
     _tabController = TabController(length: 3, vsync: this);
     _tournamentStream = _service.streamTournament(widget.tournament.id).asBroadcastStream();
     
-    _tournamentStream!.listen(
+    _tournamentSubscription = _tournamentStream!.listen(
       (t) {
         if (t != null && mounted) {
           _handleAutoDeployment(t);
@@ -39,10 +40,6 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
         debugPrint("❌ TOURNAMENT DETAIL: Error in stream subscription: $error");
       },
     );
-
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) setState(() {});
-    });
   }
 
   void _handleAutoDeployment(Tournament t) {
@@ -57,11 +54,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
         (m) => (m.whitePlayerId == currentUserId || m.blackPlayerId == currentUserId) && !m.isCompleted
       );
 
-      if (_lastDeployedMatchId == myMatch.id) return;
+      if (_lastDeployedMatchId == myMatch.id || _isNavigating) return;
 
       _lastDeployedMatchId = myMatch.id;
       print('🚀 AUTO-DEPLOY: Found active match ${myMatch.id}. Deploying player...');
       
+      _isNavigating = true;
       Future.delayed(const Duration(seconds: 1), () {
         if (mounted) {
            Navigator.of(context).push(
@@ -75,7 +73,15 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                 roundNumber: t.currentRound,
               ),
             ),
-          );
+          ).then((_) {
+            if (mounted) {
+              setState(() {
+                _isNavigating = false;
+              });
+            }
+          });
+        } else {
+          _isNavigating = false;
         }
       });
     } catch (_) {
@@ -85,7 +91,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _tournamentSubscription?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -452,7 +458,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
                     ),
                     if (match.isCompleted)
                       Text(
-                        "RESULT",
+                        match.method != null ? match.method!.toUpperCase().replaceAll('_', ' ') : "RESULT",
                         style: GoogleFonts.montserrat(color: Colors.white10, fontSize: 8, fontWeight: FontWeight.bold),
                       ),
                   ],

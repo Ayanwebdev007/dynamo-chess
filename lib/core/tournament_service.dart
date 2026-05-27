@@ -35,7 +35,7 @@ class TournamentService {
         final tournament = _parseTournament(entry.key.toString(), tData);
         _runAutomationTick(tournament);
       } catch (e) {
-        // Silent catch for background errors
+        print('❌ BACKGROUND AUTOMATION ERROR: $e');
       }
     }
   }
@@ -298,6 +298,7 @@ class TournamentService {
                   whiteScore: _toDouble(m['whiteScore'], 0.0),
                   blackScore: _toDouble(m['blackScore'], 0.0),
                   isCompleted: m['isCompleted'] == true,
+                  method: m['method']?.toString(),
                   startTime: _parseDateTime(m['createdAt']),
                 ));
               }
@@ -601,7 +602,7 @@ class TournamentService {
   }
 
   /// Record a match result and update participant scores
-  Future<void> reportMatchResult(String tournamentId, int roundNumber, String matchId, double whiteScore, double blackScore) async {
+  Future<void> reportMatchResult(String tournamentId, int roundNumber, String matchId, double whiteScore, double blackScore, {String? method}) async {
     final tRef = _db.child('tournaments').child(tournamentId);
     final snapshot = await tRef.get();
     if (!snapshot.exists || snapshot.value == null) return;
@@ -621,6 +622,9 @@ class TournamentService {
       matchMap['whiteScore'] = whiteScore;
       matchMap['blackScore'] = blackScore;
       matchMap['isCompleted'] = true;
+      if (method != null) {
+        matchMap['method'] = method;
+      }
       return Transaction.success(matchMap);
     });
 
@@ -711,8 +715,10 @@ class TournamentService {
 
   Future<void> _autoResolveMatch(String tournamentId, int roundNumber, TournamentMatch match) async {
     final gameRef = _db.child('games').child(match.id);
-    double whiteScore = 0.5;
-    double blackScore = 0.5;
+    double whiteScore = 0.0;
+    double blackScore = 0.0;
+    String method = 'double_forfeit';
+
     
     try {
       final gameSnapshot = await gameRef.get();
@@ -723,12 +729,15 @@ class TournamentService {
         if (status == 'white_won') {
           whiteScore = 1.0;
           blackScore = 0.0;
+          method = gameData['gameMethod']?.toString() ?? 'unknown';
         } else if (status == 'black_won') {
           whiteScore = 0.0;
           blackScore = 1.0;
+          method = gameData['gameMethod']?.toString() ?? 'unknown';
         } else if (status == 'draw') {
           whiteScore = 0.5;
           blackScore = 0.5;
+          method = gameData['gameMethod']?.toString() ?? 'agreement';
         } else {
           final transactionResult = await gameRef.runTransaction((Object? currentGame) {
             if (currentGame == null) return Transaction.abort();
@@ -751,16 +760,18 @@ class TournamentService {
               if (freshStatus == 'white_won') {
                 whiteScore = 1.0;
                 blackScore = 0.0;
+                method = freshData['gameMethod']?.toString() ?? 'unknown';
               } else if (freshStatus == 'black_won') {
                 whiteScore = 0.0;
                 blackScore = 1.0;
+                method = freshData['gameMethod']?.toString() ?? 'unknown';
               }
             }
           }
         }
       }
       
-      await reportMatchResult(tournamentId, roundNumber, match.id, whiteScore, blackScore);
+      await reportMatchResult(tournamentId, roundNumber, match.id, whiteScore, blackScore, method: method);
     } catch (e) {
       print('❌ AUTO ERROR: _autoResolveMatch failed for ${match.id}: $e');
     }

@@ -73,6 +73,7 @@ class _BoardScreenState extends State<BoardScreen> {
   final SettingsController _settings = SettingsController();
   bool _hasRecordedResult = false; // Prevent double recording
   bool _hasScheduledAutoQuit = false; // Prevent double auto-quitting
+  bool _hasCompletedInitialSync = false; // First time sync from Firebase
 
   @override
   void initState() {
@@ -316,16 +317,6 @@ class _BoardScreenState extends State<BoardScreen> {
             'white_won', 
             method
           );
-          // NEW: Report to Tournament Service
-          if (widget.tournamentId != null && widget.roundNumber != null) {
-            TournamentService().reportMatchResult(
-              widget.tournamentId!,
-              widget.roundNumber!,
-              widget.onlineRoomId!,
-              1.0, // White Won
-              0.0, // Black Lost
-            );
-          }
         }
         return;
       }
@@ -353,16 +344,6 @@ class _BoardScreenState extends State<BoardScreen> {
             'black_won', 
             method
           );
-          // NEW: Report to Tournament Service
-          if (widget.tournamentId != null && widget.roundNumber != null) {
-            TournamentService().reportMatchResult(
-              widget.tournamentId!,
-              widget.roundNumber!,
-              widget.onlineRoomId!,
-              0.0, // White Lost
-              1.0, // Black Won
-            );
-          }
         }
         return;
       }
@@ -389,16 +370,6 @@ class _BoardScreenState extends State<BoardScreen> {
             'draw', 
             'agreement'
           );
-          // NEW: Report to Tournament Service
-          if (widget.tournamentId != null && widget.roundNumber != null) {
-            TournamentService().reportMatchResult(
-              widget.tournamentId!,
-              widget.roundNumber!,
-              widget.onlineRoomId!,
-              0.5, // Draw
-              0.5, // Draw
-            );
-          }
         }
         return;
       }
@@ -412,6 +383,10 @@ class _BoardScreenState extends State<BoardScreen> {
         _gameState.lastMoveEnd = Position(to['x'], to['y']);
       }
 
+      // Pre-calculate the current turn for accurate condition checks
+      final turnStr = data['turn'] ?? 'white';
+      final currentFirebaseTurn = turnStr == 'white' ? PlayerColor.white : PlayerColor.black;
+
       // Sync Times - ALWAYS SYNC even if boardState is null (important for Invitations)
       // Use num? as Firebase may return double or int, and toInt() for Duration
       final num? fWhiteTime = data['whiteTime'] as num?;
@@ -421,22 +396,45 @@ class _BoardScreenState extends State<BoardScreen> {
         setState(() {
           final myColor = widget.isWhite ? PlayerColor.white : PlayerColor.black;
           
-          // CRITICAL: Only sync if it's NOT our turn, OR if the time in Firebase is significantly different.
-          // This prevents the "reset to 60s" jitter every second while our local timer is ticking.
-          
-          if (fWhiteTime != null) {
-            final newWhiteTime = Duration(seconds: fWhiteTime.toInt());
-            // Sync White clock if we are NOT White, or if White just moved (turn changed to Black)
-            if (!widget.isWhite || _gameState.turn == PlayerColor.black) {
-              _gameState.whiteTime = newWhiteTime;
+          if (!_hasCompletedInitialSync) {
+            // First sync: ALWAYS accept both times to overwrite the 60s defaults
+            if (fWhiteTime != null) _gameState.whiteTime = Duration(seconds: fWhiteTime.toInt());
+            if (fBlackTime != null) _gameState.blackTime = Duration(seconds: fBlackTime.toInt());
+            
+            // Compensate for time that passed since the last move
+            final lastMoveTs = data['lastMoveTimestamp'];
+            if (lastMoveTs != null && status == 'playing') {
+              final lastMoveTime = DateTime.fromMillisecondsSinceEpoch((lastMoveTs as num).toInt());
+              final elapsed = DateTime.now().difference(lastMoveTime);
+              
+              // Only the active player's clock should be decremented
+              if (currentFirebaseTurn == PlayerColor.white) {
+                _gameState.whiteTime -= elapsed;
+                if (_gameState.whiteTime.isNegative) _gameState.whiteTime = Duration.zero;
+              } else {
+                _gameState.blackTime -= elapsed;
+                if (_gameState.blackTime.isNegative) _gameState.blackTime = Duration.zero;
+              }
             }
-          }
-          
-          if (fBlackTime != null) {
-            final newBlackTime = Duration(seconds: fBlackTime.toInt());
-            // Sync Black clock if we are NOT Black, or if Black just moved (turn changed to White)
-            if (widget.isWhite || _gameState.turn == PlayerColor.white) {
-              _gameState.blackTime = newBlackTime;
+            _hasCompletedInitialSync = true;
+          } else {
+            // Ongoing sync: CRITICAL: Only sync if it's NOT our turn, OR if the time in Firebase is significantly different.
+            // This prevents the "reset to 60s" jitter every second while our local timer is ticking.
+            
+            if (fWhiteTime != null) {
+              final newWhiteTime = Duration(seconds: fWhiteTime.toInt());
+              // Sync White clock if we are NOT White, or if White just moved (turn changed to Black)
+              if (!widget.isWhite || currentFirebaseTurn == PlayerColor.black) {
+                _gameState.whiteTime = newWhiteTime;
+              }
+            }
+            
+            if (fBlackTime != null) {
+              final newBlackTime = Duration(seconds: fBlackTime.toInt());
+              // Sync Black clock if we are NOT Black, or if Black just moved (turn changed to White)
+              if (widget.isWhite || currentFirebaseTurn == PlayerColor.white) {
+                _gameState.blackTime = newBlackTime;
+              }
             }
           }
         });
@@ -448,8 +446,7 @@ class _BoardScreenState extends State<BoardScreen> {
         setState(() {
           _gameState.board.grid = FenConverter.fromFen(fen);
           // Sync Turn
-          final turnStr = data['turn'] ?? 'white';
-          _gameState.turn = turnStr == 'white' ? PlayerColor.white : PlayerColor.black;
+          _gameState.turn = currentFirebaseTurn;
           
           if (status == 'playing' && _gameState.status != GameStatus.whiteWon && 
               _gameState.status != GameStatus.blackWon && _gameState.status != GameStatus.draw) {
@@ -500,10 +497,21 @@ class _BoardScreenState extends State<BoardScreen> {
       } else if (widget.onlineRoomId != null) {
         // Online timer: only decrement if Firebase status is 'playing' (not 'waiting')
          if (_gameState.status == GameStatus.playing && (_firebaseGameStatus == 'playing' || widget.tournamentId != null)) {
-             setState(() {
-               _gameState.decrementTime(const Duration(seconds: 1));
-               
-               // Check if time ran out locally
+              setState(() {
+                _gameState.decrementTime(const Duration(seconds: 1));
+                
+                // 30-second Walkover logic (Abandonment on first move)
+                if (_gameState.history.isEmpty && widget.tournamentId != null) {
+                  final timeLimit = widget.settings.timeLimit;
+                  final activeTime = _gameState.turn == PlayerColor.white ? _gameState.whiteTime : _gameState.blackTime;
+                  final elapsed = timeLimit - activeTime;
+                  if (elapsed > const Duration(seconds: 30)) {
+                    _gameState.status = _gameState.turn == PlayerColor.white ? GameStatus.blackWon : GameStatus.whiteWon;
+                    _gameState.gameResult = "Opponent Abandoned";
+                  }
+                }
+
+                // Check if time ran out locally
                if (_gameState.status != GameStatus.playing) {
                  if (!widget.isSpectator) {
                    _checkAndRecordOnlineGameOver();
@@ -1307,8 +1315,9 @@ class _BoardScreenState extends State<BoardScreen> {
     final result = _gameState.status == GameStatus.whiteWon ? 'white_won' : 
                    (_gameState.status == GameStatus.blackWon ? 'black_won' : 'draw');
     
-    final method = _gameState.gameResult.contains('Resigned') ? 'resignation' : 
-                   (_gameState.gameResult.contains('time') ? 'timeout' : 'checkmate');
+    final method = _gameState.gameResult.contains('Abandoned') ? 'abandonment' :
+                   (_gameState.gameResult.contains('Resigned') ? 'resignation' : 
+                   (_gameState.gameResult.contains('time') ? 'timeout' : 'checkmate'));
 
     final winnerId = _gameState.status == GameStatus.whiteWon ? _whitePlayerId : 
                     (_gameState.status == GameStatus.blackWon ? _blackPlayerId : null);
@@ -1332,6 +1341,7 @@ class _BoardScreenState extends State<BoardScreen> {
         widget.onlineRoomId!,
         whiteScore,
         blackScore,
+        method: method,
       );
     }
     

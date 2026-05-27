@@ -49,6 +49,7 @@ class TournamentMatch {
   double? whiteScore; // 1, 0.5, or 0
   double? blackScore;
   final bool isCompleted;
+  final String? method; // e.g. checkmate, timeout, abandonment, double_forfeit
   final DateTime startTime;
 
   TournamentMatch({
@@ -60,6 +61,7 @@ class TournamentMatch {
     this.whiteScore,
     this.blackScore,
     this.isCompleted = false,
+    this.method,
     DateTime? startTime,
   }) : startTime = startTime ?? DateTime.now();
 }
