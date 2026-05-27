@@ -765,6 +765,29 @@ class TournamentService {
       }
       return Transaction.success(roundMap);
     });
+
+    // 4. Sync game node status — ensure /games/{matchId} is not stuck at 'playing'
+    try {
+      final gameRef = _db.child('games').child(matchId);
+      final gameSnapshot = await gameRef.get();
+      if (gameSnapshot.exists && gameSnapshot.value != null) {
+        final gameData = _firebaseToMap(gameSnapshot.value);
+        final gameStatus = gameData['status']?.toString();
+        if (gameStatus == 'playing' || gameStatus == 'waiting') {
+          String finalStatus = 'draw';
+          if (whiteScore > blackScore) finalStatus = 'white_won';
+          if (blackScore > whiteScore) finalStatus = 'black_won';
+          await gameRef.update({
+            'status': finalStatus,
+            'gameMethod': method ?? 'tournament_resolved',
+            'finishedAt': DateTime.now().millisecondsSinceEpoch,
+          });
+          print('🧹 CLEANUP: Synced game node $matchId from $gameStatus → $finalStatus');
+        }
+      }
+    } catch (e) {
+      print('⚠️ Game node sync failed for $matchId (non-fatal): $e');
+    }
   }
 
   Future<void> _autoResolveMatch(String tournamentId, int roundNumber, TournamentMatch match) async {

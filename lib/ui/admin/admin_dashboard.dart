@@ -258,6 +258,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 }
               }
 
+              // If a tournament game is still 'playing' after 20 minutes, it's an orphan
+              if (data['status'] == 'playing' && e.key.toString().startsWith('tm_') && data['createdAt'] != null) {
+                final createdAt = data['createdAt'] as int;
+                if (now - createdAt > twentyMinutes) {
+                  db.child('games').child(e.key).update({
+                    'status': 'draw',
+                    'gameMethod': 'orphan_cleanup',
+                    'finishedAt': DateTime.now().millisecondsSinceEpoch,
+                  });
+                  return false;
+                }
+              }
+
               // Only show games that are ACTIVELY being played by two identified players
               return data['status'] == 'playing' && 
                      data['whitePlayerName'] != null && data['whitePlayerName'] != '' &&
