@@ -182,6 +182,24 @@ class TournamentService {
               }
             });
           }
+
+          // Instant Self-Healing: Check if match finished in the games node but failed to report
+          if (!_activeMatchResolutions.contains(match.id)) {
+            _db.child('games').child(match.id).child('status').get().then((snapshot) {
+              if (snapshot.exists && snapshot.value != null && !_activeMatchResolutions.contains(match.id)) {
+                final status = snapshot.value.toString();
+                if (status != 'playing' && status != 'waiting') {
+                  _activeMatchResolutions.add(match.id);
+                  print('🤖 AUTO: Match ${match.id} finished locally ($status) but tournament missed it. Self-healing.');
+                  _autoResolveMatch(t.id, t.currentRound, match).then((_) {
+                    _activeMatchResolutions.remove(match.id);
+                  }).catchError((e) {
+                    _activeMatchResolutions.remove(match.id);
+                  });
+                }
+              }
+            });
+          }
         }
       }
 
@@ -429,9 +447,30 @@ class TournamentService {
     });
   }
 
-  /// Delete a tournament
+  /// Delete a tournament and clean up all associated orphaned game nodes
   Future<void> deleteTournament(String tournamentId) async {
-    await _db.child('tournaments').child(tournamentId).remove();
+    try {
+      final tRef = _db.child('tournaments').child(tournamentId);
+      final snapshot = await tRef.get();
+      if (snapshot.exists && snapshot.value != null) {
+        final tMap = _firebaseToMap(snapshot.value);
+        final dynamic roundsRaw = tMap['rounds'];
+        if (roundsRaw != null) {
+          final roundsMap = _firebaseToMap(roundsRaw);
+          for (var roundVal in roundsMap.values) {
+            final round = _firebaseToMap(roundVal);
+            final matchesMap = _firebaseToMap(round['matches']);
+            for (var matchId in matchesMap.keys) {
+              await _db.child('games').child(matchId.toString()).remove();
+            }
+          }
+        }
+      }
+      await tRef.remove();
+      print('✅ Deleted tournament and all associated matches for: $tournamentId');
+    } catch (e) {
+      print('❌ ERROR deleting tournament: $e');
+    }
   }
 
   /// Pair next round (Admin/Automated)

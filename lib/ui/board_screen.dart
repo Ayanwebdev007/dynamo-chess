@@ -1359,7 +1359,25 @@ class _BoardScreenState extends State<BoardScreen> {
       Future.delayed(const Duration(seconds: 10), () {
         if (mounted) {
           print('🚀 AUTO-QUIT: Returning to tournament dashboard.');
-          Navigator.of(context).pop();
+          // Safely pop all dialogs and return to the tournament dashboard.
+          // Since we don't have named routes, we pop until we are no longer on a dialog,
+          // then pop the BoardScreen itself.
+          Navigator.of(context).popUntil((route) {
+            // Stop when we hit a route that is NOT a dialog and NOT the current board screen
+            return route.isFirst || route.settings.name == '/tournament_detail' || (route is MaterialPageRoute && route.builder.toString().contains('TournamentDetailScreen'));
+          });
+          
+          // If the above popUntil doesn't work perfectly (due to no named routes),
+          // a simple fallback is to use Navigator.pop(context) repeatedly.
+          // For safety, let's just use popUntil route.isFirst as a fallback if not caught,
+          // actually, the safest generic way without named routes is to pop twice if dialog is open.
+          // A robust way in Flutter is to check if there's a dialog:
+          if (ModalRoute.of(context)?.isCurrent != true) {
+             Navigator.of(context).pop(); // Pop dialog
+          }
+          if (mounted) {
+             Navigator.of(context).pop(); // Pop BoardScreen
+          }
         }
       });
     }

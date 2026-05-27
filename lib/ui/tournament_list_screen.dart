@@ -163,7 +163,12 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(child: _buildStatusChip(t)),
+                    Flexible(
+                      child: StreamBuilder<int>(
+                        stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+                        builder: (context, _) => _buildStatusChip(t),
+                      ),
+                    ),
                     Text(
                       "SWISS LEAGUE",
                       style: GoogleFonts.robotoMono(
@@ -209,7 +214,10 @@ class _TournamentListScreenState extends State<TournamentListScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                _buildJoinButton(t),
+                StreamBuilder<int>(
+                  stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+                  builder: (context, _) => _buildJoinButton(t),
+                ),
               ],
             ),
           ),
