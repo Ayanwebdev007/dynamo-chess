@@ -251,7 +251,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               // AUTO-CLEANUP LOGIC:
               // If a game is 'waiting' and older than 20 minutes, mark it as 'aborted'
               if (data['status'] == 'waiting' && data['createdAt'] != null) {
-                final createdAt = data['createdAt'] as int;
+                final createdAt = (data['createdAt'] as num).toInt();
                 if (now - createdAt > twentyMinutes) {
                   db.child('games').child(e.key).update({'status': 'aborted'});
                   return false;
@@ -260,7 +260,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
               // If a tournament game is still 'playing' after 20 minutes, it's an orphan
               if (data['status'] == 'playing' && e.key.toString().startsWith('tm_') && data['createdAt'] != null) {
-                final createdAt = data['createdAt'] as int;
+                final createdAt = (data['createdAt'] as num).toInt();
                 if (now - createdAt > twentyMinutes) {
                   db.child('games').child(e.key).update({
                     'status': 'draw',
