@@ -501,7 +501,7 @@ class _BoardScreenState extends State<BoardScreen> {
                 _gameState.decrementTime(const Duration(seconds: 1));
                 
                 // 30-second Walkover logic (Abandonment on first move)
-                if (_gameState.history.isEmpty && widget.tournamentId != null) {
+                if (_gameState.history.isEmpty && widget.tournamentId != null && !widget.isSpectator) {
                   final timeLimit = widget.settings.timeLimit;
                   final activeTime = _gameState.turn == PlayerColor.white ? _gameState.whiteTime : _gameState.blackTime;
                   final elapsed = timeLimit - activeTime;

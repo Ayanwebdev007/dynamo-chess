@@ -157,14 +157,29 @@ class TournamentService {
       // Check for expired matches in the current active round
       for (var match in currentRound.matches) {
         if (!match.isCompleted && !_activeMatchResolutions.contains(match.id)) {
-          final expiryTime = match.startTime.add(t.settings.timeLimit * 2).add(const Duration(minutes: 2));
-          if (now.isAfter(expiryTime)) {
+          final fullExpiryTime = match.startTime.add(t.settings.timeLimit * 2).add(const Duration(minutes: 2));
+          final walkoverCheckTime = match.startTime.add(const Duration(seconds: 35));
+
+          if (now.isAfter(fullExpiryTime)) {
             _activeMatchResolutions.add(match.id);
-            print('🤖 AUTO: Match ${match.id} has expired. Triggering auto-resolution.');
+            print('🤖 AUTO: Match ${match.id} has fully expired. Triggering auto-resolution.');
             _autoResolveMatch(t.id, t.currentRound, match).then((_) {
               _activeMatchResolutions.remove(match.id);
             }).catchError((e) {
               _activeMatchResolutions.remove(match.id);
+            });
+          } else if (now.isAfter(walkoverCheckTime)) {
+            // Fast-track double forfeit if no moves were made after 35 seconds
+            _db.child('games').child(match.id).child('lastMoveTimestamp').get().then((snapshot) {
+              if (!snapshot.exists && !_activeMatchResolutions.contains(match.id)) {
+                _activeMatchResolutions.add(match.id);
+                print('🤖 AUTO: Match ${match.id} had 0 moves after 35s. Forcing double forfeit.');
+                _autoResolveMatch(t.id, t.currentRound, match).then((_) {
+                  _activeMatchResolutions.remove(match.id);
+                }).catchError((e) {
+                  _activeMatchResolutions.remove(match.id);
+                });
+              }
             });
           }
         }
@@ -746,13 +761,30 @@ class TournamentService {
             if (currentStatus == 'white_won' || currentStatus == 'black_won' || currentStatus == 'draw') {
               return Transaction.abort();
             }
-            gMap['status'] = 'draw';
-            gMap['gameMethod'] = 'timeout_expiry';
+            if (gMap['lastMoveTimestamp'] == null) {
+              gMap['status'] = 'draw';
+              gMap['gameMethod'] = 'double_forfeit';
+            } else {
+              gMap['status'] = 'draw';
+              gMap['gameMethod'] = 'timeout_expiry';
+            }
             gMap['finishedAt'] = DateTime.now().millisecondsSinceEpoch;
             return Transaction.success(gMap);
           });
           
-          if (!transactionResult.committed) {
+          if (transactionResult.committed) {
+            if (transactionResult.snapshot != null && transactionResult.snapshot!.value != null) {
+              final finalData = _firebaseToMap(transactionResult.snapshot!.value);
+              method = finalData['gameMethod']?.toString() ?? 'timeout_expiry';
+            }
+            if (method == 'double_forfeit') {
+              whiteScore = 0.0;
+              blackScore = 0.0;
+            } else {
+              whiteScore = 0.5;
+              blackScore = 0.5;
+            }
+          } else {
             final freshSnapshot = await gameRef.get();
             if (freshSnapshot.exists && freshSnapshot.value != null) {
               final freshData = _firebaseToMap(freshSnapshot.value);
