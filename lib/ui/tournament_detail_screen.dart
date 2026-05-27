@@ -642,20 +642,270 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
       );
     }
 
+    final isCompleted = t.status == TournamentStatus.completed;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 12 : 24),
+      child: Column(
+        children: [
+          if (isCompleted && participants.length >= 3) ...[
+            _buildPodiumShowcase(participants, isMobile),
+            const SizedBox(height: 32),
+          ] else if (isCompleted && participants.isNotEmpty) ...[
+            _buildVictoryBanner(participants.first),
+            const SizedBox(height: 24),
+          ],
+          _buildStandingsHeader(),
+          ...List.generate(participants.length, (index) {
+            return _buildStandingRow(index + 1, participants[index], isCompleted);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPodiumShowcase(List<TournamentParticipant> participants, bool isMobile) {
+    final first = participants[0];
+    final second = participants[1];
+    final third = participants[2];
+
     return Column(
       children: [
-        if (t.status == TournamentStatus.completed) _buildVictoryBanner(participants.first),
-        _buildStandingsHeader(),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            itemCount: participants.length,
-            itemBuilder: (context, index) {
-              return _buildStandingRow(index + 1, participants[index]);
-            },
+        // Champion Crown Header
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: 1.0),
+          duration: const Duration(milliseconds: 1200),
+          curve: Curves.elasticOut,
+          builder: (context, value, child) {
+            return Transform.scale(
+              scale: value,
+              child: child,
+            );
+          },
+          child: Column(
+            children: [
+              const Icon(Icons.auto_awesome, color: Color(0xFFD4AF37), size: 28),
+              const SizedBox(height: 8),
+              Text(
+                "FINAL STANDINGS",
+                style: GoogleFonts.cinzel(
+                  color: const Color(0xFFD4AF37),
+                  fontSize: isMobile ? 18 : 24,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4.0,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "TOURNAMENT COMPLETE",
+                style: GoogleFonts.montserrat(
+                  color: Colors.white24,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3.0,
+                ),
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 32),
+
+        // Podium — 2nd | 1st | 3rd
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: _buildPodiumCard(second, 2, isMobile)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildPodiumCard(first, 1, isMobile)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildPodiumCard(third, 3, isMobile)),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildPodiumCard(TournamentParticipant p, int rank, bool isMobile) {
+    final isChampion = rank == 1;
+    final double height = rank == 1 ? 220 : (rank == 2 ? 180 : 160);
+    
+    final Color medalColor;
+    final Color medalGlow;
+    final IconData medalIcon;
+    final String rankLabel;
+
+    switch (rank) {
+      case 1:
+        medalColor = const Color(0xFFD4AF37);
+        medalGlow = const Color(0xFFD4AF37);
+        medalIcon = Icons.emoji_events;
+        rankLabel = "CHAMPION";
+        break;
+      case 2:
+        medalColor = const Color(0xFFC0C0C0);
+        medalGlow = const Color(0xFFB8B8B8);
+        medalIcon = Icons.workspace_premium;
+        rankLabel = "2ND PLACE";
+        break;
+      default:
+        medalColor = const Color(0xFFCD7F32);
+        medalGlow = const Color(0xFFCD7F32);
+        medalIcon = Icons.military_tech;
+        rankLabel = "3RD PLACE";
+    }
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 800 + (rank * 200)),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - value)),
+          child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
+        );
+      },
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              medalColor.withOpacity(isChampion ? 0.25 : 0.15),
+              medalColor.withOpacity(0.03),
+              Colors.transparent,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: medalColor.withOpacity(isChampion ? 0.6 : 0.3),
+            width: isChampion ? 2 : 1,
+          ),
+          boxShadow: isChampion
+              ? [
+                  BoxShadow(
+                    color: medalGlow.withOpacity(0.3),
+                    blurRadius: 30,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : [],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Background glow for champion
+            if (isChampion)
+              Positioned(
+                top: 0,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        medalGlow.withOpacity(0.3),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Crown for champion
+                  if (isChampion) ...[
+                    const Icon(Icons.auto_awesome, color: Color(0xFFD4AF37), size: 16),
+                    const SizedBox(height: 4),
+                  ],
+
+                  // Medal Icon
+                  Container(
+                    padding: EdgeInsets.all(isChampion ? 14 : 10),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: medalColor.withOpacity(0.15),
+                      border: Border.all(color: medalColor.withOpacity(0.5), width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: medalGlow.withOpacity(0.2),
+                          blurRadius: 16,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      medalIcon,
+                      color: medalColor,
+                      size: isChampion ? 32 : 24,
+                    ),
+                  ),
+                  SizedBox(height: isChampion ? 12 : 8),
+
+                  // Rank Label
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: medalColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: medalColor.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      rankLabel,
+                      style: GoogleFonts.montserrat(
+                        color: medalColor,
+                        fontSize: isChampion ? 9 : 8,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isChampion ? 12 : 8),
+
+                  // Player Name
+                  Text(
+                    p.name.toUpperCase(),
+                    style: GoogleFonts.cinzel(
+                      color: Colors.white,
+                      fontSize: isMobile ? (isChampion ? 12 : 10) : (isChampion ? 14 : 12),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Score
+                  Text(
+                    p.score.toStringAsFixed(1),
+                    style: GoogleFonts.robotoMono(
+                      color: medalColor,
+                      fontSize: isChampion ? 22 : 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    "PTS",
+                    style: GoogleFonts.montserrat(
+                      color: medalColor.withOpacity(0.5),
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -737,7 +987,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 20 : 36, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 12, vertical: 16),
       child: Row(
         children: [
           SizedBox(width: 30, child: Text("RK", style: _standingHeaderStyle)),
@@ -757,34 +1007,70 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
     letterSpacing: 1.0,
   );
 
-  Widget _buildStandingRow(int rank, TournamentParticipant p) {
+  Widget _buildStandingRow(int rank, TournamentParticipant p, bool isCompleted) {
+    final Color? medalColor;
+    final IconData? medalIcon;
+
+    if (isCompleted && rank <= 3) {
+      switch (rank) {
+        case 1:
+          medalColor = const Color(0xFFD4AF37);
+          medalIcon = Icons.emoji_events;
+          break;
+        case 2:
+          medalColor = const Color(0xFFC0C0C0);
+          medalIcon = Icons.workspace_premium;
+          break;
+        case 3:
+          medalColor = const Color(0xFFCD7F32);
+          medalIcon = Icons.military_tech;
+          break;
+        default:
+          medalColor = null;
+          medalIcon = null;
+      }
+    } else {
+      medalColor = null;
+      medalIcon = null;
+    }
+
+    final bool isTopThree = isCompleted && rank <= 3;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
+        color: isTopThree
+            ? medalColor!.withOpacity(0.08)
+            : Colors.white.withOpacity(0.02),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(
+          color: isTopThree
+              ? medalColor!.withOpacity(0.3)
+              : Colors.white.withOpacity(0.05),
+        ),
       ),
       child: Row(
         children: [
           SizedBox(
             width: 30,
-            child: Text(
-              "$rank",
-              style: GoogleFonts.robotoMono(
-                color: rank <= 3 ? const Color(0xFFD4AF37) : Colors.white38,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            child: isTopThree
+                ? Icon(medalIcon, color: medalColor, size: 20)
+                : Text(
+                    "$rank",
+                    style: GoogleFonts.robotoMono(
+                      color: Colors.white38,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               p.name,
               style: GoogleFonts.montserrat(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
+                color: isTopThree ? Colors.white : Colors.white70,
+                fontWeight: isTopThree ? FontWeight.w700 : FontWeight.w500,
                 fontSize: 14,
               ),
             ),
@@ -795,7 +1081,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> with Si
               p.score.toStringAsFixed(1),
               textAlign: TextAlign.center,
               style: GoogleFonts.robotoMono(
-                color: const Color(0xFFD4AF37),
+                color: isTopThree ? medalColor : const Color(0xFFD4AF37),
                 fontWeight: FontWeight.bold,
               ),
             ),
