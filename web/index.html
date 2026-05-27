@@ -66,6 +66,14 @@
         <h1>LOADING DYNAMO CHESS...</h1>
     </div>
     <script src="main.dart.js" type="application/javascript"></script>
+    <script>
+        window.addEventListener('flutter-first-frame', function () {
+            var loadingDiv = document.getElementById('loading');
+            if (loadingDiv) {
+                loadingDiv.remove();
+            }
+        });
+    </script>
 </body>
 
 </html>
