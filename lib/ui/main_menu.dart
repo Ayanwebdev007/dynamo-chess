@@ -398,13 +398,18 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
-                "DYNAMO CHESS",
-                style: GoogleFonts.cinzel(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFFD4AF37),
-                  letterSpacing: 4.0,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  "DYNAMO CHESS",
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  style: GoogleFonts.cinzel(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFFD4AF37),
+                    letterSpacing: 4.0,
+                  ),
                 ),
               ),
               const SizedBox(height: 60),

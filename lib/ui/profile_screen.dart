@@ -602,10 +602,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         _buildSettingsAction('EDIT PROFILE', Icons.edit, () => _showEditProfileDialog(user)),
         const SizedBox(height: 12),
-        _buildSettingsAction('SIGN OUT', Icons.logout, () async {
-          await FirebaseAuth.instance.signOut();
-          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-        }, isDestructive: true),
+        _buildSettingsAction('SIGN OUT', Icons.logout, () => _showLogoutConfirmationDialog(), isDestructive: true),
         const SizedBox(height: 12),
         _buildSettingsAction('DELETE ACCOUNT', Icons.delete_forever, () => _showDeleteAccountDialog(), isDestructive: true),
       ],
@@ -694,6 +691,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showLogoutConfirmationDialog() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0A0E0A), // Deep Dark, matching theme
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5), // Gold border
+        ),
+        title: Text(
+          'SIGN OUT?',
+          style: GoogleFonts.cinzel(
+            color: const Color(0xFFD4AF37),
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          'Are you sure you want to sign out of your account?',
+          style: GoogleFonts.montserrat(color: Colors.white70),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.white30),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'NO',
+              style: GoogleFonts.montserrat(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'YES',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
+    }
   }
 
   Future<void> _showDeleteAccountDialog() async {

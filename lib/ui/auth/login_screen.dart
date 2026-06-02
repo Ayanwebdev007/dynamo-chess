@@ -64,13 +64,18 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo or Title
-                Text(
-                  "DYNAMO CHESS",
-                  style: GoogleFonts.cinzel(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFFD4AF37),
-                    letterSpacing: 2,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    "DYNAMO CHESS",
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: GoogleFonts.cinzel(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFD4AF37),
+                      letterSpacing: 2,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 40),

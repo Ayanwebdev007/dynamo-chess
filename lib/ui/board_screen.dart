@@ -74,6 +74,7 @@ class _BoardScreenState extends State<BoardScreen> {
   bool _hasRecordedResult = false; // Prevent double recording
   bool _hasScheduledAutoQuit = false; // Prevent double auto-quitting
   bool _hasCompletedInitialSync = false; // First time sync from Firebase
+  bool _canPop = false;
 
   @override
   void initState() {
@@ -689,7 +690,24 @@ class _BoardScreenState extends State<BoardScreen> {
     final bottomCaptured = ScoreCalculator.getCapturedPieces(_gameState.history, bottomColor);
     final scoreAdvantages = ScoreCalculator.getScoreAdvantage(_gameState.history);
 
-    return Scaffold(
+    final bool bypassConfirm = widget.tournamentId != null || widget.isSpectator || _gameState.status != GameStatus.playing;
+
+    return PopScope(
+      canPop: bypassConfirm || _canPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        final shouldQuit = await _showQuitConfirmationDialog();
+        if (shouldQuit == true) {
+          setState(() {
+            _canPop = true;
+          });
+          if (context.mounted) {
+            Navigator.of(context).pop(result);
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFF0A0E0A), // Deep Dark
       body: Stack(
         children: [
@@ -897,6 +915,61 @@ class _BoardScreenState extends State<BoardScreen> {
           
           // Waiting overlay when Player A is waiting for Player B to accept invitation
           if (_firebaseGameStatus == 'waiting') _buildWaitingOverlay(),
+        ],
+      ),
+    ),
+    );
+  }
+
+  Future<bool?> _showQuitConfirmationDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0A0E0A), // Deep Dark, matching theme
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5), // Gold border
+        ),
+        title: Text(
+          'QUIT MATCH?',
+          style: GoogleFonts.cinzel(
+            color: const Color(0xFFD4AF37),
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          'Are you sure you want to quit the current match? Your progress will be lost.',
+          style: GoogleFonts.montserrat(color: Colors.white70),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.white30),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'NO',
+              style: GoogleFonts.montserrat(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: Text(
+              'YES',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );

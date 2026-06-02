@@ -99,7 +99,7 @@ class RulesEngine {
     }
 
     // En-passant (Rule 7 & 13)
-    // Supports "two types" of en-passant: captures after 2-step or 3-step jumps.
+    // Supports captures after 2-step or 3-step jumps.
     if (lastMove != null && lastMove.pieceType == PieceType.pawn && lastMove.distanceY >= 2) {
       // Must be in an adjacent file
       if ((start.x - lastMove.end.x).abs() == 1) {
@@ -107,20 +107,17 @@ class RulesEngine {
         final jumpEnd = lastMove.end.y;
         final dyJump = (jumpEnd - jumpStart).sign;
 
-        // Passed ranks include jumpEnd and everything between jumpStart and jumpEnd
-        // A capture is possible if our pawn is at 'jumpEnd' (standard) 
-        // OR if it's at one of the skipped ranks (jumpEnd - dyJump, etc.)
-        
-        bool isAtCorrectRank = false;
-        // Check if our current rank matches where the opponent pawn jumped past or landed
-        if (start.y == jumpEnd || start.y == jumpEnd - dyJump || (lastMove.distanceY == 3 && start.y == jumpEnd - 2 * dyJump)) {
-           isAtCorrectRank = true;
-        }
+        // The target square of the capture is one step forward diagonally for the capturing pawn
+        final targetY = start.y + dy;
 
-        if (isAtCorrectRank) {
-          // Rule: capture and move diagonally to the rank 'ahead' in the jump direction
-          // Target square is the rank the opponent pawn jumped into or past, relative to our current rank
-          moves.add(Position(lastMove.end.x, start.y + dyJump));
+        // The capture is valid if the target rank is one of the skipped ranks
+        // (strictly between the opponent pawn's start and end ranks)
+        final isSkippedRank = (dyJump > 0)
+            ? (targetY > jumpStart && targetY < jumpEnd)
+            : (targetY > jumpEnd && targetY < jumpStart);
+
+        if (isSkippedRank) {
+          moves.add(Position(lastMove.end.x, targetY));
         }
       }
     }
