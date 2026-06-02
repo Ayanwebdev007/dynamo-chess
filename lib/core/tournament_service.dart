@@ -140,7 +140,7 @@ class TournamentService {
           // Double check status before pairing
           final currentT = await _db.child('tournaments').child(t.id).get();
           if (currentT.exists && (currentT.value as Map)['status'] == 'enrolling') {
-            await pairNextRound(t.id);
+            await pairNextRound(t.id, 0);
           }
         } catch (e) {
           print('❌ AUTO ERROR: Start failed for ${t.id}: $e');
@@ -245,7 +245,7 @@ class TournamentService {
               await _db.child('tournaments').child(t.id).update({
                 'nextEventAt': null,
               });
-              await pairNextRound(t.id);
+              await pairNextRound(t.id, t.currentRound);
             } catch (e) {
               print('❌ AUTO ERROR: Next round failed for ${t.id}: $e');
             } finally {
@@ -474,12 +474,16 @@ class TournamentService {
   }
 
   /// Pair next round (Admin/Automated)
-  Future<void> pairNextRound(String tournamentId) async {
+  Future<void> pairNextRound(String tournamentId, [int? expectedCurrentRound]) async {
     final tRef = _db.child('tournaments').child(tournamentId);
     final snapshot = await tRef.get();
     if (!snapshot.exists || snapshot.value == null) return;
     
     final tournament = _parseTournament(tournamentId, _firebaseToMap(snapshot.value));
+    if (expectedCurrentRound != null && tournament.currentRound != expectedCurrentRound) {
+      print('⚠️ AUTO: Current round (${tournament.currentRound}) does not match expected ($expectedCurrentRound). Skipping pairing.');
+      return;
+    }
     final nextRoundNumber = tournament.currentRound + 1;
 
     // Acquire pairing lock to prevent concurrent clients from running pairing logic
@@ -573,6 +577,7 @@ class TournamentService {
         });
       }
 
+      final List<Future<void>> gameInitFutures = [];
       while (unassigned.length >= 2) {
         final p1 = unassigned.removeAt(0);
         int foundIndex = -1;
@@ -605,8 +610,8 @@ class TournamentService {
           'createdAt': ServerValue.timestamp,
         });
 
-        // INITIALIZE GAME NODE IN REALTIME DB
-        await _db.child('games').child(matchId).set({
+        // INITIALIZE GAME NODE IN REALTIME DB (Parallel queue)
+        gameInitFutures.add(_db.child('games').child(matchId).set({
           'status': 'playing',
           'whitePlayerId': whitePlayer.userId,
           'whitePlayerName': whitePlayer.name,
@@ -619,7 +624,11 @@ class TournamentService {
           'createdAt': ServerValue.timestamp,
           'tournamentId': tournamentId,
           'roundNumber': nextRoundNumber,
-        });
+        }));
+      }
+
+      if (gameInitFutures.isNotEmpty) {
+        await Future.wait(gameInitFutures);
       }
 
       updates['currentRound'] = nextRoundNumber;
