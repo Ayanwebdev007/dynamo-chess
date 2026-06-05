@@ -525,6 +525,19 @@ class OnlineService {
       print('ERROR reserving username: $e');
     }
   }
+
+  // Update username for an existing user
+  Future<void> updateUsername(String oldUsername, String newUsername, String uid, String email) async {
+    try {
+      if (oldUsername.isNotEmpty) {
+        await _db.child('usernames').child(oldUsername.toLowerCase()).remove();
+      }
+      await reserveUsername(newUsername, uid);
+      await updateUserProfile(uid, newUsername, email);
+    } catch (e) {
+      print('ERROR updating username: $e');
+    }
+  }
   
   // Find user by username
   Future<Map<String, dynamic>?> findUserByUsername(String username) async {

@@ -13,6 +13,7 @@ class BoardHighlightPainter extends CustomPainter {
   final Position? checkPos;
   final bool isWhite;
   final bool showLastMove;
+  final String theme;
 
   BoardHighlightPainter({
     required this.board,
@@ -23,6 +24,7 @@ class BoardHighlightPainter extends CustomPainter {
     this.checkPos,
     this.isWhite = true,
     this.showLastMove = true,
+    this.theme = 'classic',
   });
 
   @override
@@ -46,7 +48,19 @@ class BoardHighlightPainter extends CustomPainter {
           isLastMove = (lastMove!.start == pos || lastMove!.end == pos);
         }
         if (isLastMove && showLastMove) {
-          canvas.drawRect(rect, Paint()..color = const Color(0xFFF7F769).withOpacity(0.5)); // Yellowish
+          Position endPos = lastMoveEnd ?? lastMove?.end ?? Position(-1, -1);
+          PlayerColor? movedPieceColor;
+          if (endPos.isValid) {
+            movedPieceColor = board.getPiece(endPos)?.color;
+          }
+
+          Color highlightColor = const Color(0xFFF7F769).withOpacity(0.5); // Default yellowish
+          
+          if (theme == 'classic' && movedPieceColor == PlayerColor.black) {
+             highlightColor = Colors.grey.shade400.withOpacity(0.5); // Light grey
+          }
+
+          canvas.drawRect(rect, Paint()..color = highlightColor);
         }
 
         // Selection Highlight

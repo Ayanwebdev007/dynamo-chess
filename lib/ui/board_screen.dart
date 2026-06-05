@@ -619,9 +619,9 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   void _showPromotionDialog(Position pos) {
-    // If it's the AI's turn or Auto-Promote is ON, auto-promote to Queen
-    bool shouldAutoPromote = _settings.autoPromote || 
-                            (widget.isVsComputer && _gameState.turn != (widget.isWhite ? PlayerColor.white : PlayerColor.black));
+    // If it's the AI's turn, auto-promote to Queen
+    bool shouldAutoPromote = 
+        (widget.isVsComputer && _gameState.turn != (widget.isWhite ? PlayerColor.white : PlayerColor.black));
 
     if (shouldAutoPromote) {
       _gameState.finalizePromotion(PieceType.queen);
@@ -815,6 +815,7 @@ class _BoardScreenState extends State<BoardScreen> {
                                                    ? _findKing(_gameState.turn) 
                                                    : null,
                                                 isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                                                theme: _settings.boardTheme,
                                               ),
                                             ),
                                           ),
@@ -1130,6 +1131,7 @@ class _BoardScreenState extends State<BoardScreen> {
                    ? _findKing(_gameState.turn) 
                    : null,
                 isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                theme: _settings.boardTheme,
               ),
             ),
           ),
@@ -1211,11 +1213,28 @@ class _BoardScreenState extends State<BoardScreen> {
     if (index >= _gameState.history.length) return const SizedBox();
     
     final move = _gameState.history[index];
-    final startFile = String.fromCharCode(97 + move.start.x);
-    final startRank = 10 - move.start.y;
     final endFile = String.fromCharCode(97 + move.end.x);
     final endRank = 10 - move.end.y;
-    final moveText = "$startFile$startRank-$endFile$endRank";
+    
+    String p = '';
+    if (move.pieceType == PieceType.king) p = 'K';
+    else if (move.pieceType == PieceType.queen) p = 'Q';
+    else if (move.pieceType == PieceType.missile) p = 'M';
+    else if (move.pieceType == PieceType.rook) p = 'R';
+    else if (move.pieceType == PieceType.bishop) p = 'B';
+    else if (move.pieceType == PieceType.knight) p = 'N';
+
+    String moveText;
+    if (move.isCapture) {
+      if (move.pieceType == PieceType.pawn) {
+        final startFile = String.fromCharCode(97 + move.start.x);
+        moveText = "${startFile}x$endFile$endRank";
+      } else {
+        moveText = "${p}x$endFile$endRank";
+      }
+    } else {
+      moveText = "$p$endFile$endRank";
+    }
 
     final isLastMove = index == _gameState.history.length - 1;
 
@@ -1552,12 +1571,29 @@ class _BoardScreenState extends State<BoardScreen> {
                 final moveNumber = (index / 2).floor() + 1;
                 final isWhite = index % 2 == 0;
                 
-                // Format: e2-e4
-                final startFile = String.fromCharCode(97 + move.start.x);
-                final startRank = 10 - move.start.y;
+                // Standard Algebraic Notation
                 final endFile = String.fromCharCode(97 + move.end.x);
                 final endRank = 10 - move.end.y;
-                final moveText = "$startFile$startRank-$endFile$endRank";
+                
+                String p = '';
+                if (move.pieceType == PieceType.king) p = 'K';
+                else if (move.pieceType == PieceType.queen) p = 'Q';
+                else if (move.pieceType == PieceType.missile) p = 'M';
+                else if (move.pieceType == PieceType.rook) p = 'R';
+                else if (move.pieceType == PieceType.bishop) p = 'B';
+                else if (move.pieceType == PieceType.knight) p = 'N';
+
+                String moveText;
+                if (move.isCapture) {
+                  if (move.pieceType == PieceType.pawn) {
+                    final startFile = String.fromCharCode(97 + move.start.x);
+                    moveText = "${startFile}x$endFile$endRank";
+                  } else {
+                    moveText = "${p}x$endFile$endRank";
+                  }
+                } else {
+                  moveText = "$p$endFile$endRank";
+                }
 
                 return Container(
                   margin: const EdgeInsets.symmetric(horizontal: 4),

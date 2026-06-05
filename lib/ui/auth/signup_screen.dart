@@ -18,8 +18,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _errorMessage;
 
   Future<void> _signup() async {
-    if (_usernameController.text.isEmpty) {
+    final email = _emailController.text.trim();
+    if (_usernameController.text.trim().isEmpty) {
       setState(() => _errorMessage = "Please enter a username");
+      return;
+    }
+    
+    if (email.isEmpty) {
+      setState(() => _errorMessage = "Please enter an email");
+      return;
+    }
+
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(email)) {
+      setState(() => _errorMessage = "Please enter a valid email address");
       return;
     }
     

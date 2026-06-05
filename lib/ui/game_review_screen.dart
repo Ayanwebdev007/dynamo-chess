@@ -293,8 +293,40 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
                     final fromY = (from['y'] as num).toInt();
                     final toX = (to['x'] as num).toInt();
                     final toY = (to['y'] as num).toInt();
+                    final String prevFen = (index - 1) == 0 ? _startingFen : _moves[index - 2]['fen'];
+                    final prevBoard = FenConverter.fromFen(prevFen);
+                    final piece = prevBoard[fromY][fromX];
                     
-                    final moveText = "${String.fromCharCode(97 + fromX)}${10 - fromY} → ${String.fromCharCode(97 + toX)}${10 - toY}";
+                    String p = '';
+                    if (piece != null) {
+                      if (piece.type == PieceType.king) p = 'K';
+                      else if (piece.type == PieceType.queen) p = 'Q';
+                      else if (piece.type == PieceType.missile) p = 'M';
+                      else if (piece.type == PieceType.rook) p = 'R';
+                      else if (piece.type == PieceType.bishop) p = 'B';
+                      else if (piece.type == PieceType.knight) p = 'N';
+                    }
+                    
+                    bool isCapture = false;
+                    if (piece != null && prevBoard[toY][toX] != null) {
+                      isCapture = true;
+                    } else if (piece?.type == PieceType.pawn && fromX != toX) {
+                      isCapture = true;
+                    }
+                    
+                    String moveText;
+                    final endFile = String.fromCharCode(97 + toX);
+                    final endRank = 10 - toY;
+                    if (isCapture) {
+                       if (piece?.type == PieceType.pawn) {
+                          final startFile = String.fromCharCode(97 + fromX);
+                          moveText = "${startFile}x$endFile$endRank";
+                       } else {
+                          moveText = "${p}x$endFile$endRank";
+                       }
+                    } else {
+                       moveText = "$p$endFile$endRank";
+                    }
                     return _buildMoveItem(index - 1, moveText, move['player']?.toString().toUpperCase() ?? "");
                   },
                 ),

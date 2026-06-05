@@ -669,10 +669,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: saving
                   ? null
                   : () async {
-                      if (controller.text.trim().isEmpty) return;
+                      final newUsername = controller.text.trim();
+                      if (newUsername.isEmpty) return;
+                      
+                      final oldUsername = user.displayName ?? '';
+                      if (newUsername.toLowerCase() == oldUsername.toLowerCase()) {
+                         Navigator.pop(context);
+                         return;
+                      }
+
                       setState(() => saving = true);
                       try {
-                        await user.updateDisplayName(controller.text.trim());
+                        final exists = await _onlineService.checkUsernameExists(newUsername);
+                        if (exists) {
+                          setState(() => saving = false);
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username already taken!'), backgroundColor: Colors.red));
+                          return;
+                        }
+
+                        await user.updateDisplayName(newUsername);
+                        await _onlineService.updateUsername(oldUsername, newUsername, user.uid, user.email ?? '');
+
                         if (mounted) {
                           this.setState(() {});
                           Navigator.pop(context);

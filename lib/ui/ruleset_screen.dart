@@ -39,11 +39,11 @@ class _RulesetScreenState extends State<RulesetScreen> with TickerProviderStateM
     RuleProtocol(
       protocolId: "DYNAMO-002",
       title: "EXPANDED PIECES",
-      description: "Each player starts with 20 pieces. The setup includes 10 Pawns and 10 Pieces, introducing two additional Knights and two powerful hybrid Missiles for maximum tactical depth.",
+      description: "Each player starts with 20 pieces. The setup includes 10 Pawns and 10 Pieces, introducing two additional Pawns and two powerful hybrid Missiles for maximum tactical depth.",
       setup: (board) => board.initializeBoard(),
       highlights: [
-        Position(3, 9), Position(6, 9), // Missiles White
-        Position(1, 9), Position(8, 9), // Extra Knights White (relative to 8x8)
+        Position(3, 9), Position(6, 9), // White Missiles
+        Position(3, 0), Position(6, 0), // Black Missiles
       ],
     ),
     RuleProtocol(

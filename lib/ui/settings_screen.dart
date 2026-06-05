@@ -92,13 +92,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             _settings.showLastMove,
                             (value) => setState(() => _settings.toggleLastMove(value)),
                           ),
-                          _buildSettingsTile(
-                            "Auto-Promote to Queen",
-                            "Save time by bypassing piece selection",
-                            Icons.auto_awesome,
-                            _settings.autoPromote,
-                            (value) => setState(() => _settings.toggleAutoPromote(value)),
-                          ),
                           
                           const SizedBox(height: 24),
                           _buildSettingsSection("VISUALS"),
