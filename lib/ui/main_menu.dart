@@ -534,7 +534,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
         ),
         child: Text(
-          "INITIATE MATCH",
+          "START MATCH",
           style: GoogleFonts.montserrat(
             fontSize: 18,
             fontWeight: FontWeight.w800,
