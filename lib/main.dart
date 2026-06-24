@@ -121,7 +121,10 @@ class DynamoChessApp extends StatelessWidget {
         final name = settings.name ?? '/';
         
         if (name == '/privacypolicy') {
-          return MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen());
+          return MaterialPageRoute(
+            builder: (context) => const PrivacyPolicyScreen(),
+            settings: settings,
+          );
         }
         
         // Handle Admin Sub-routes
