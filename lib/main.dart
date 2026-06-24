@@ -9,6 +9,7 @@ import 'core/settings_controller.dart';
 import 'core/notification_service.dart';
 import 'ui/admin/admin_dashboard.dart';
 import 'ui/admin/admin_login.dart';
+import 'ui/privacy_policy_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -118,6 +119,10 @@ class DynamoChessApp extends StatelessWidget {
       initialRoute: '/',
       onGenerateRoute: (settings) {
         final name = settings.name ?? '/';
+        
+        if (name == '/privacypolicy') {
+          return MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen());
+        }
         
         // Handle Admin Sub-routes
         if (name == '/admin/login') {

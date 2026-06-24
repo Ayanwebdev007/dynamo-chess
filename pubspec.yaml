@@ -1,6 +1,6 @@
 name: dynamo_chess
 description: A custom 10x10 chess game with unique rules.
-version: 1.0.1+4
+version: 1.0.1+5
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
