@@ -29,6 +29,9 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   late PlayerColor _currentTurn;
   int _currentMoveIndex = 0;
   bool _isSolved = false;
+  bool _madeWrongMove = false;
+  int _userMoveCount = 0;
+  int _totalUserMoves = 0;
 
   // Selected Board State
   Position? _selectedPosition;
@@ -38,10 +41,21 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
 
   // Screen State
   bool _showSuccessOverlay = false;
+  bool _showFailOverlay = false;
 
   @override
   void initState() {
     super.initState();
+    _initPuzzle();
+  }
+
+  void _initPuzzle() {
+    // Calculate total user moves: every other move starting from index 0
+    _totalUserMoves = 0;
+    for (int i = 0; i < widget.puzzle.solutionMoves.length; i++) {
+      // Even indices are user moves (0=user, 1=computer, 2=user, 3=computer...)
+      if (i % 2 == 0) _totalUserMoves++;
+    }
     _resetPuzzle();
   }
 
@@ -52,7 +66,10 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
       _currentTurn = widget.puzzle.startTurn;
       _currentMoveIndex = 0;
       _isSolved = false;
+      _madeWrongMove = false;
+      _userMoveCount = 0;
       _showSuccessOverlay = false;
+      _showFailOverlay = false;
       _selectedPosition = null;
       _validMoves = [];
       _lastMoveStart = null;
@@ -61,7 +78,9 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   }
 
   void _onSquareTapped(Position pos) {
-    if (_isSolved || _currentTurn != widget.puzzle.startTurn) return;
+    if (_isSolved || _showFailOverlay) return;
+    // Only allow taps during the user's turn
+    if (_currentTurn != widget.puzzle.startTurn) return;
 
     if (_validMoves.contains(pos) && _selectedPosition != null) {
       _executeUserMove(_selectedPosition!, pos);
@@ -94,21 +113,12 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   }
 
   void _executeUserMove(Position start, Position end) {
-    // Check if correct move
+    // Check if the move matches the expected solution move
     final expectedMove = widget.puzzle.solutionMoves[_currentMoveIndex];
     final isCorrect = start == expectedMove.start && end == expectedMove.end;
 
     if (!isCorrect) {
-      // Revert/Alert
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Incorrect move. Try again! Board reset to starting position."),
-          backgroundColor: Colors.redAccent,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      _resetPuzzle();
-      return;
+      _madeWrongMove = true;
     }
 
     final piece = _board.getPiece(start);
@@ -122,7 +132,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
         AudioService().playMove();
       }
 
-      // Execute on board
+      // Execute the move on the board (even if wrong)
       _board.setPiece(end, piece);
       _board.setPiece(start, null);
 
@@ -130,31 +140,48 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
       _lastMoveEnd = end;
 
       _currentMoveIndex++;
+      _userMoveCount++;
       _selectedPosition = null;
       _validMoves = [];
 
-      // Check if complete
-      if (_currentMoveIndex >= widget.puzzle.solutionMoves.length) {
+      // Check if user has completed all their moves
+      if (_userMoveCount >= _totalUserMoves) {
         _onPuzzleCompleted();
-      } else {
+      } else if (_currentMoveIndex < widget.puzzle.solutionMoves.length) {
         // Trigger Opponent Move
         _currentTurn = (_currentTurn == PlayerColor.white)
             ? PlayerColor.black
             : PlayerColor.white;
         
         Timer(const Duration(milliseconds: 800), _executeOpponentMove);
+      } else {
+        // No more solution moves but user hasn't finished — puzzle ends
+        _onPuzzleCompleted();
       }
     });
   }
 
   void _executeOpponentMove() {
-    if (_isSolved || _currentMoveIndex >= widget.puzzle.solutionMoves.length) return;
+    if (_isSolved || _showFailOverlay) return;
+    if (_currentMoveIndex >= widget.puzzle.solutionMoves.length) return;
 
     final expectedMove = widget.puzzle.solutionMoves[_currentMoveIndex];
     final piece = _board.getPiece(expectedMove.start);
     final target = _board.getPiece(expectedMove.end);
 
-    if (piece == null) return;
+    // If the piece isn't there (user deviated), skip the opponent move
+    // and just hand the turn back to the user
+    if (piece == null) {
+      setState(() {
+        _currentMoveIndex++;
+        _currentTurn = widget.puzzle.startTurn;
+        // If no more moves, end the puzzle
+        if (_userMoveCount >= _totalUserMoves || _currentMoveIndex >= widget.puzzle.solutionMoves.length) {
+          _onPuzzleCompleted();
+        }
+      });
+      return;
+    }
 
     setState(() {
       if (target != null) {
@@ -172,8 +199,8 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
       _currentMoveIndex++;
       _currentTurn = widget.puzzle.startTurn; // Hand turn back to user
       
-      // Check if complete (just in case)
-      if (_currentMoveIndex >= widget.puzzle.solutionMoves.length) {
+      // Check if all user moves are done
+      if (_userMoveCount >= _totalUserMoves || _currentMoveIndex >= widget.puzzle.solutionMoves.length) {
         _onPuzzleCompleted();
       }
     });
@@ -181,10 +208,14 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
 
   void _onPuzzleCompleted() {
     AudioService().playGameOver();
-    widget.onSolved();
     setState(() {
       _isSolved = true;
-      _showSuccessOverlay = true;
+      if (_madeWrongMove) {
+        _showFailOverlay = true;
+      } else {
+        widget.onSolved();
+        _showSuccessOverlay = true;
+      }
     });
   }
 
@@ -233,13 +264,18 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
                         icon: const Icon(Icons.arrow_back, color: Colors.white70),
                         onPressed: () => Navigator.pop(context),
                       ),
-                      Text(
-                        "SOLVE CHALLENGE",
-                        style: GoogleFonts.cinzel(
-                          color: const Color(0xFFD4AF37),
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2.0,
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "SOLVE CHALLENGE",
+                            style: GoogleFonts.cinzel(
+                              color: const Color(0xFFD4AF37),
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
                         ),
                       ),
                       IconButton(
@@ -300,6 +336,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
           ),
 
           if (_showSuccessOverlay) _buildSuccessOverlay(),
+          if (_showFailOverlay) _buildFailOverlay(),
         ],
       ),
     );
@@ -471,6 +508,69 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
                 ),
                 child: Text(
                   'CONTINUE',
+                  style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFailOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      child: Center(
+        child: Container(
+          width: 320,
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE57373), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFE57373).withOpacity(0.2),
+                blurRadius: 30,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.close_rounded, color: Color(0xFFE57373), size: 64),
+              const SizedBox(height: 24),
+              Text(
+                "INCORRECT",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cinzel(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "That wasn't the winning sequence. Study the position and try again!",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(fontSize: 13, color: Colors.white70, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: _resetPuzzle,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE57373),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(200, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                child: Text(
+                  'TRY AGAIN',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, letterSpacing: 1.0),
                 ),
               ),

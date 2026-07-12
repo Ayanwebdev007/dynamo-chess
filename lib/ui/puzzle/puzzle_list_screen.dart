@@ -79,13 +79,19 @@ class _PuzzleListScreenState extends State<PuzzleListScreen> {
                         onPressed: () => Navigator.pop(context),
                       ),
                       const SizedBox(width: 16),
-                      Text(
-                        "TACTICAL CHALLENGES",
-                        style: GoogleFonts.cinzel(
-                          color: const Color(0xFFD4AF37),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2.0,
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            "TACTICAL CHALLENGES",
+                            style: GoogleFonts.cinzel(
+                              color: const Color(0xFFD4AF37),
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
                         ),
                       ),
                     ],

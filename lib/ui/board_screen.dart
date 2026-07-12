@@ -576,29 +576,34 @@ class _BoardScreenState extends State<BoardScreen> {
       }, (promotionPos) {
         _showPromotionDialog(promotionPos);
       }, onMoveMade: () {
-         _scrollToEnd();
-         if (widget.onlineRoomId != null) {
-           _sendOnlineMove();
-         }
-          if (widget.isVsComputer) {
-            _triggerAIMove();
-          }
-          
-          // Check for Game Over (Now both Offline and Online)
-          if (_gameState.status != GameStatus.playing) {
-            if (widget.onlineRoomId == null) {
-              _checkAndRecordOfflineGameOver();
-            } else {
-               _checkAndRecordOnlineGameOver();
-            }
-            
-            // Delay the overlay
-            Future.delayed(const Duration(milliseconds: 2000), () {
-              _showGameOverAndScheduleAutoQuit();
-            });
-          }
+         _onMoveCompleted();
       });
     });
+  }
+  void _onMoveCompleted() {
+    _scrollToEnd();
+    if (widget.onlineRoomId != null) {
+      _sendOnlineMove();
+    }
+    if (widget.isVsComputer) {
+      _triggerAIMove();
+    }
+    
+    // Check for Game Over (Now both Offline and Online)
+    if (_gameState.status != GameStatus.playing) {
+      if (widget.onlineRoomId == null) {
+        _checkAndRecordOfflineGameOver();
+      } else {
+          _checkAndRecordOnlineGameOver();
+      }
+      
+      // Delay the overlay
+      Future.delayed(const Duration(milliseconds: 2000), () {
+        if (mounted) {
+          _showGameOverAndScheduleAutoQuit();
+        }
+      });
+    }
   }
 
   void _sendOnlineMove() {
@@ -625,9 +630,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
     if (shouldAutoPromote) {
       _gameState.finalizePromotion(PieceType.queen);
-      if (widget.isVsComputer && _gameState.turn == (widget.isWhite ? PlayerColor.white : PlayerColor.black)) {
-        // Only trigger AI if it's actually AI's turn now (shouldn't happen here but safe)
-      }
+      _onMoveCompleted();
       return;
     }
 
@@ -658,9 +661,7 @@ class _BoardScreenState extends State<BoardScreen> {
         setState(() {
           _gameState.finalizePromotion(type);
           Navigator.of(context).pop();
-          if (widget.onlineRoomId != null) {
-             _sendOnlineMove();
-          }
+          _onMoveCompleted();
         });
       },
     );
