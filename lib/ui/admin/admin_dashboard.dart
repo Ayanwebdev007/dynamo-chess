@@ -11,7 +11,11 @@ import '../game_review_screen.dart';
 import '../../core/tournament_service.dart';
 import '../../core/tournament_models.dart';
 
-enum AdminTab { overview, users, games, tournaments, analytics, settings }
+import 'admin_store_view.dart';
+import 'admin_orders_view.dart';
+import 'admin_puzzles_view.dart';
+
+enum AdminTab { overview, users, games, tournaments, store, orders, analytics, puzzles, settings }
 
 class AdminDashboardScreen extends StatefulWidget {
   final AdminTab initialTab;
@@ -359,8 +363,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return _buildGamesView();
       case AdminTab.tournaments:
         return _buildTournamentsView();
+      case AdminTab.store:
+        return const AdminStoreView();
+      case AdminTab.orders:
+        return const AdminOrdersView();
       case AdminTab.analytics:
         return _buildAnalyticsView();
+      case AdminTab.puzzles:
+        return const AdminPuzzlesView();
       case AdminTab.settings:
         return _buildMessagingView();
       default:
@@ -1133,7 +1143,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           _buildSidebarItem(Icons.people_outline, "Users", _currentTab == AdminTab.users, () => setState(() => _currentTab = AdminTab.users)),
           _buildSidebarItem(Icons.sports_esports_outlined, "Games", _currentTab == AdminTab.games, () => setState(() => _currentTab = AdminTab.games)),
           _buildSidebarItem(Icons.emoji_events_outlined, "Tournaments", _currentTab == AdminTab.tournaments, () => setState(() => _currentTab = AdminTab.tournaments)),
+          _buildSidebarItem(Icons.storefront_outlined, "Store", _currentTab == AdminTab.store, () => setState(() => _currentTab = AdminTab.store)),
+          _buildSidebarItem(Icons.receipt_long_outlined, "Orders", _currentTab == AdminTab.orders, () => setState(() => _currentTab = AdminTab.orders)),
           _buildSidebarItem(Icons.analytics_outlined, "Analytics", _currentTab == AdminTab.analytics, () => setState(() => _currentTab = AdminTab.analytics)),
+          _buildSidebarItem(Icons.extension_outlined, "Puzzles", _currentTab == AdminTab.puzzles, () => setState(() => _currentTab = AdminTab.puzzles)),
           _buildSidebarItem(Icons.settings_outlined, "System Messaging", _currentTab == AdminTab.settings, () => setState(() => _currentTab = AdminTab.settings)),
           const Spacer(),
           _buildSidebarItem(Icons.logout, "Exit Panel", false, () => Navigator.of(context).pushReplacementNamed('/')),

@@ -7,6 +7,7 @@ import '../core/models.dart';
 import 'board_screen.dart';
 import 'online_menu.dart';
 import 'platform_asset_image.dart';
+import 'puzzle/puzzle_list_screen.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/auth_service.dart';
@@ -19,6 +20,8 @@ import '../core/notification_service.dart';
 import '../core/audio_service.dart';
 import 'ruleset_screen.dart';
 import 'tournament_list_screen.dart';
+import 'store_screen.dart';
+import '../core/navigation_helper.dart';
 
 
 class MainMenuScreen extends StatefulWidget {
@@ -200,6 +203,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RulesetScreen())),
                         tooltip: "How to Play / Rules",
                       ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.storefront, color: Color(0xFFD4AF37), size: 28),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StoreScreen())),
+                        tooltip: "Store",
+                      ),
                     ],
                   ),
                   Row(
@@ -305,32 +314,53 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       children: [
                         _buildSectionHeader("SELECT GAME MODE"),
                         const SizedBox(height: 24),
-                         _buildGlassModeButton(
-                          _currentUser == null ? "LOGIN TO ONLINE" : "ONLINE", 
-                          Icons.public, 
-                          false, 
-                          () {
-                            if (_currentUser == null) {
-                              Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-                            } else {
-                              Navigator.push(context, MaterialPageRoute(builder: (context) => const OnlineMenuScreen()));
-                            }
-                          }
+                         Row(
+                          children: [
+                            Expanded(
+                              child: _buildGlassModeButton(
+                                _currentUser == null ? "LOGIN TO ONLINE" : "ONLINE", 
+                                Icons.public, 
+                                false, 
+                                () {
+                                  if (_currentUser == null) {
+                                    Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                                  } else {
+                                    Navigator.push(context, MaterialPageRoute(builder: (context) => const OnlineMenuScreen()));
+                                  }
+                                }
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(child: _buildGlassModeButton("OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false))),
+                          ],
                         ),
                         const SizedBox(height: 16),
                         Row(
                           children: [
-                            Expanded(child: _buildGlassModeButton("OFFLINE", Icons.person_outline, !_isVsComputer, () => setState(() => _isVsComputer = false))),
-                            const SizedBox(width: 16),
                             Expanded(child: _buildGlassModeButton("WITH AI", Icons.smart_toy_outlined, _isVsComputer, () => setState(() => _isVsComputer = true))),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildGlassModeButton(
+                                "PUZZLES", 
+                                Icons.extension_outlined, 
+                                false, 
+                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PuzzleListScreen()))
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        _buildGlassModeButton(
-                          "TOURNAMENT", 
-                          Icons.emoji_events_outlined, 
-                          false, 
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()))
+                        Center(
+                          child: FractionallySizedBox(
+                            widthFactor: 0.6,
+                            child: _buildGlassModeButton(
+                              "TOURNAMENT", 
+                              Icons.emoji_events_outlined, 
+                              false, 
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen())),
+                              centerContent: true,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 48),
 
@@ -446,13 +476,26 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildGlassModeButton(
-                      "TOURNAMENT", 
-                      Icons.emoji_events_outlined, 
+                      "PUZZLES", 
+                      Icons.extension_outlined, 
                       false, 
-                      () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen()))
+                      () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PuzzleListScreen()))
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: FractionallySizedBox(
+                  widthFactor: 0.6,
+                  child: _buildGlassModeButton(
+                    "TOURNAMENT", 
+                    Icons.emoji_events_outlined, 
+                    false, 
+                    () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TournamentListScreen())),
+                    centerContent: true,
+                  ),
+                ),
               ),
               const SizedBox(height: 40),
 
@@ -597,14 +640,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 
-  Widget _buildGlassModeButton(String label, IconData icon, bool isSelected, void Function() onTap) {
+  Widget _buildGlassModeButton(String label, IconData icon, bool isSelected, void Function() onTap, {bool centerContent = false}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.1) : Colors.white.withOpacity(0.02),
           borderRadius: BorderRadius.circular(16),
@@ -614,25 +657,55 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           ),
         ),
         child: Row(
+          mainAxisAlignment: centerContent ? MainAxisAlignment.center : MainAxisAlignment.start,
           children: [
-            Icon(icon, color: isSelected ? const Color(0xFFD4AF37) : Colors.white38, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: GoogleFonts.montserrat(
-                  color: isSelected ? Colors.white : Colors.white38,
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  letterSpacing: 1.2,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (isSelected) ...[
+            if (!centerContent || !isSelected) ...[
+              Icon(icon, color: isSelected ? const Color(0xFFD4AF37) : Colors.white38, size: 20),
               const SizedBox(width: 8),
+            ],
+            if (centerContent && isSelected) ...[
               const Icon(Icons.check_circle, color: Color(0xFFD4AF37), size: 16),
+              const SizedBox(width: 8),
+            ],
+            if (centerContent)
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.center,
+                  child: Text(
+                    label,
+                    style: GoogleFonts.montserrat(
+                      color: isSelected ? Colors.white : Colors.white38,
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    label,
+                    style: GoogleFonts.montserrat(
+                      color: isSelected ? Colors.white : Colors.white38,
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            if (!centerContent && isSelected) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.check_circle, color: Color(0xFFD4AF37), size: 16),
+            ],
+            if (centerContent && !isSelected) ...[
+              const SizedBox(width: 8),
+              Icon(icon, color: Colors.transparent, size: 20), // Balance visual weight
             ],
           ],
         ),
@@ -647,8 +720,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: const BoxConstraints(minWidth: 80),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        constraints: const BoxConstraints(minWidth: 70),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFD4AF37) : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(12),
@@ -664,9 +737,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               style: GoogleFonts.montserrat(
                 color: isSelected ? Colors.black : Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
+            const SizedBox(height: 2),
             Text(
               category,
               style: GoogleFonts.montserrat(
@@ -688,8 +762,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: const BoxConstraints(minWidth: 80),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        constraints: const BoxConstraints(minWidth: 70),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFD4AF37) : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(12),
@@ -705,9 +779,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               style: GoogleFonts.montserrat(
                 color: isSelected ? Colors.black : Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
+            const SizedBox(height: 2),
             Icon(Icons.tune, size: 10, color: isSelected ? Colors.black54 : Colors.white30),
           ],
         ),

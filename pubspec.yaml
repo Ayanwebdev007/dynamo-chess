@@ -36,6 +36,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/sounds/
+    - assets/store/
     - assets/dynamo_logo.png
     - assets/noflag.png
     - assets/inflag.png
