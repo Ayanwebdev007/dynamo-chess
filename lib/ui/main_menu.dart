@@ -8,6 +8,7 @@ import 'board_screen.dart';
 import 'online_menu.dart';
 import 'platform_asset_image.dart';
 import 'puzzle/puzzle_list_screen.dart';
+import 'saved_positions_screen.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/auth_service.dart';
@@ -24,6 +25,8 @@ import 'store_screen.dart';
 import '../core/navigation_helper.dart';
 
 
+enum ColorSelection { white, black, random, alternate }
+
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
@@ -32,10 +35,13 @@ class MainMenuScreen extends StatefulWidget {
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
+
   GameSettings _selectedSettings = GameSettings.blitz3;
   double _customTimeMinutes = 10.0;
   double _customIncrementSeconds = 0.0;
   bool _isVsComputer = false;
+  ColorSelection _selectedColor = ColorSelection.white;
+  bool _lastPlayedWasWhite = false;
   User? _currentUser;
   late StreamSubscription<User?> _authSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _invitationListener;
@@ -185,45 +191,61 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             },
           ),
 
-          // Global Navigation Icons (Floating)
-          Positioned(
-            top: 24,
-            left: 24,
-            right: 24,
-            child: SafeArea(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      _buildProfileAvatar(),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.help_outline, color: Color(0xFFD4AF37), size: 28),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RulesetScreen())),
-                        tooltip: "How to Play / Rules",
+          Builder(
+            builder: (context) {
+              final bool isWideScreen = MediaQuery.of(context).size.width > 1000;
+              return Positioned(
+                top: isWideScreen ? 24 : 12,
+                left: isWideScreen ? 24 : 12,
+                right: isWideScreen ? 24 : 12,
+                child: SafeArea(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: SizedBox(
+                      width: math.max(320.0, MediaQuery.of(context).size.width - (isWideScreen ? 48 : 24)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              _buildProfileAvatar(),
+                              SizedBox(width: isWideScreen ? 8 : 4),
+                              IconButton(
+                                icon: Icon(Icons.help_outline, color: const Color(0xFFD4AF37), size: isWideScreen ? 28 : 24),
+                                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RulesetScreen())),
+                                tooltip: "How to Play / Rules",
+                              ),
+                              SizedBox(width: isWideScreen ? 4 : 2),
+                              IconButton(
+                                icon: Icon(Icons.storefront, color: const Color(0xFFD4AF37), size: isWideScreen ? 28 : 24),
+                                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StoreScreen())),
+                                tooltip: "Store",
+                              ),
+                              SizedBox(width: isWideScreen ? 4 : 2),
+                              IconButton(
+                                icon: Icon(Icons.bookmark_outline, color: const Color(0xFFD4AF37), size: isWideScreen ? 28 : 24),
+                                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPositionsScreen())),
+                                tooltip: "Saved Positions",
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              _buildNotificationBell(),
+                              SizedBox(width: isWideScreen ? 8 : 4),
+                              IconButton(
+                                icon: Icon(Icons.settings, color: Colors.white70, size: isWideScreen ? 28 : 24),
+                                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.storefront, color: Color(0xFFD4AF37), size: 28),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const StoreScreen())),
-                        tooltip: "Store",
-                      ),
-                    ],
+                    ),
                   ),
-                  Row(
-                    children: [
-                      _buildNotificationBell(),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.settings, color: Colors.white70, size: 28),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ],
       );
@@ -559,18 +581,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => BoardScreen(
-                settings: _selectedSettings,
-                isVsComputer: _isVsComputer,
-                aiDifficulty: 1,
-              ),
-            ),
-          );
-        },
+        onPressed: () => _showMatchSetupDialog(),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
@@ -584,6 +595,156 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             color: Colors.black,
             letterSpacing: 2.0,
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showMatchSetupDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          backgroundColor: const Color(0xFF141914),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+          ),
+          title: Text(
+            "MATCH SETUP",
+            style: GoogleFonts.cinzel(
+              color: const Color(0xFFD4AF37),
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2.0,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _isVsComputer ? "VS DYNAMO AI" : "LOCAL OFFLINE MATCH",
+                style: GoogleFonts.montserrat(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "${_selectedSettings.timeLimit.inMinutes} MIN (${_selectedSettings.increment.inSeconds}s inc)",
+                style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 11),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                "CHOOSE YOUR COLOR",
+                style: GoogleFonts.montserrat(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildModalColorChoice("WHITE", Icons.wb_sunny_outlined, ColorSelection.white, setModalState),
+                  _buildModalColorChoice("BLACK", Icons.nightlight_round, ColorSelection.black, setModalState),
+                  _buildModalColorChoice("RANDOM", Icons.shuffle, ColorSelection.random, setModalState),
+                ],
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+
+                bool chosenIsWhite = true;
+                if (_selectedColor == ColorSelection.white) {
+                  chosenIsWhite = true;
+                } else if (_selectedColor == ColorSelection.black) {
+                  chosenIsWhite = false;
+                } else if (_selectedColor == ColorSelection.random) {
+                  chosenIsWhite = math.Random().nextBool();
+                }
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BoardScreen(
+                      settings: _selectedSettings,
+                      isVsComputer: _isVsComputer,
+                      aiDifficulty: 1,
+                      isWhite: chosenIsWhite,
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD4AF37),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+              ),
+              child: Text(
+                "PLAY MATCH ➔",
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModalColorChoice(String label, IconData icon, ColorSelection choice, StateSetter setModalState) {
+    final isSelected = _selectedColor == choice;
+    return InkWell(
+      onTap: () {
+        setState(() => _selectedColor = choice);
+        setModalState(() {});
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 65,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFD4AF37) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFD4AF37) : Colors.white10,
+            width: 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFD4AF37).withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : [],
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: isSelected ? Colors.black : Colors.white70,
+            ),
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: GoogleFonts.montserrat(
+                  color: isSelected ? Colors.black : Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -621,6 +782,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       ),
     );
   }
+
+
 
   Widget _buildSectionHeader(String title) {
     return Row(

@@ -119,8 +119,8 @@ class _StoreScreenState extends State<StoreScreen> {
           return LayoutBuilder(
             builder: (context, constraints) {
               final isMobile = constraints.maxWidth < 600;
-              final crossAxisCount = isMobile ? 2 : (constraints.maxWidth ~/ 280);
-              final aspectRatio = isMobile ? 0.72 : 0.75;
+              final crossAxisCount = isMobile ? 1 : (constraints.maxWidth ~/ 280);
+              final aspectRatio = isMobile ? 0.85 : 0.75;
 
               return GridView.builder(
                 padding: const EdgeInsets.all(16),

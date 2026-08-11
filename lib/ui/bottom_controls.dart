@@ -6,6 +6,7 @@ class BottomControls extends StatelessWidget {
   final bool canClaimDraw;
   final VoidCallback? onChat;
   final VoidCallback? onResign;
+  final VoidCallback? onSavePosition;
   final bool showChatBadge;
 
   const BottomControls({
@@ -13,6 +14,7 @@ class BottomControls extends StatelessWidget {
     this.onDrawClaim,
     this.onChat,
     this.onResign,
+    this.onSavePosition,
     this.canClaimDraw = false,
     this.showChatBadge = false,
   });
@@ -24,6 +26,11 @@ class BottomControls extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Save Position Button
+          _buildActionButton(Icons.bookmark_add_outlined, onSavePosition),
+
+          const SizedBox(width: 16),
+
           // Chat Button
           Stack(
             children: [
@@ -41,7 +48,7 @@ class BottomControls extends StatelessWidget {
             ],
           ),
           
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           
           // Draw Button
           _buildActionButton(
@@ -50,7 +57,7 @@ class BottomControls extends StatelessWidget {
             isActive: canClaimDraw
           ),
           
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           
           // Resign Button
           _buildActionButton(Icons.flag_outlined, onResign),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/puzzle_service.dart';
+import '../../core/saved_puzzles_service.dart';
 import 'puzzle_play_screen.dart';
 
 class PuzzleListScreen extends StatefulWidget {
@@ -13,25 +14,32 @@ class PuzzleListScreen extends StatefulWidget {
 
 class _PuzzleListScreenState extends State<PuzzleListScreen> {
   final PuzzleService _puzzleService = PuzzleService();
+  final SavedPuzzlesService _savedPuzzlesService = SavedPuzzlesService();
   Set<String> _solvedPuzzleIds = {};
+  Set<String> _savedPuzzleIds = {};
   bool _isLoadingSolved = true;
+  bool _showSavedOnly = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSolvedPuzzles();
+    _loadPuzzleData();
   }
 
-  Future<void> _loadSolvedPuzzles() async {
+  Future<void> _loadPuzzleData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('solved_puzzles') ?? [];
-      setState(() {
-        _solvedPuzzleIds = list.toSet();
-        _isLoadingSolved = false;
-      });
+      final saved = await _savedPuzzlesService.getSavedPuzzleIds();
+      if (mounted) {
+        setState(() {
+          _solvedPuzzleIds = list.toSet();
+          _savedPuzzleIds = saved;
+          _isLoadingSolved = false;
+        });
+      }
     } catch (_) {
-      setState(() => _isLoadingSolved = false);
+      if (mounted) setState(() => _isLoadingSolved = false);
     }
   }
 
@@ -98,6 +106,37 @@ class _PuzzleListScreenState extends State<PuzzleListScreen> {
                   ),
                 ),
                 
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => setState(() => _showSavedOnly = false),
+                        icon: Icon(Icons.grid_view, color: !_showSavedOnly ? const Color(0xFFD4AF37) : Colors.white38, size: 18),
+                        label: Text(
+                          "ALL PUZZLES",
+                          style: GoogleFonts.montserrat(
+                            color: !_showSavedOnly ? const Color(0xFFD4AF37) : Colors.white38,
+                            fontWeight: !_showSavedOnly ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      TextButton.icon(
+                        onPressed: () => setState(() => _showSavedOnly = true),
+                        icon: Icon(Icons.bookmark, color: _showSavedOnly ? const Color(0xFFD4AF37) : Colors.white38, size: 18),
+                        label: Text(
+                          "SAVED (${_savedPuzzleIds.length})",
+                          style: GoogleFonts.montserrat(
+                            color: _showSavedOnly ? const Color(0xFFD4AF37) : Colors.white38,
+                            fontWeight: _showSavedOnly ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 40),
                   child: Divider(color: Colors.white10),
@@ -114,19 +153,23 @@ class _PuzzleListScreenState extends State<PuzzleListScreen> {
                         );
                       }
 
-                      final puzzles = snapshot.data ?? [];
+                      var puzzles = snapshot.data ?? [];
+                      if (_showSavedOnly) {
+                        puzzles = puzzles.where((p) => _savedPuzzleIds.contains(p.id)).toList();
+                      }
 
                       if (puzzles.isEmpty) {
                         return _buildEmptyState();
                       }
 
+                      final isWide = MediaQuery.of(context).size.width > 600;
                       return GridView.builder(
-                        padding: const EdgeInsets.all(40),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        padding: EdgeInsets.all(isWide ? 40 : 16),
+                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent: 380,
-                          mainAxisExtent: 220,
-                          crossAxisSpacing: 32,
-                          mainAxisSpacing: 32,
+                          mainAxisExtent: isWide ? 220 : 200,
+                          crossAxisSpacing: isWide ? 32 : 16,
+                          mainAxisSpacing: isWide ? 32 : 16,
                         ),
                         itemCount: puzzles.length,
                         itemBuilder: (context, index) {
@@ -192,7 +235,7 @@ class _PuzzleListScreenState extends State<PuzzleListScreen> {
                   onSolved: () => _onPuzzleSolved(puzzle.id),
                 ),
               ),
-            );
+            ).then((_) => _loadPuzzleData());
           },
           child: Padding(
             padding: const EdgeInsets.all(24),

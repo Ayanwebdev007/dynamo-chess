@@ -7,6 +7,7 @@ import '../../core/rules_engine.dart';
 import '../../core/fen_converter.dart';
 import '../../core/audio_service.dart';
 import '../../core/puzzle_service.dart';
+import '../../core/saved_puzzles_service.dart';
 import '../platform_asset_image.dart';
 import '../board_painter.dart';
 
@@ -42,11 +43,32 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   // Screen State
   bool _showSuccessOverlay = false;
   bool _showFailOverlay = false;
+  bool _isSaved = false;
 
   @override
   void initState() {
     super.initState();
     _initPuzzle();
+    _checkSavedStatus();
+  }
+
+  Future<void> _checkSavedStatus() async {
+    final isSaved = await SavedPuzzlesService().isPuzzleSaved(widget.puzzle.id);
+    if (mounted) setState(() => _isSaved = isSaved);
+  }
+
+  Future<void> _toggleSave() async {
+    final nowSaved = await SavedPuzzlesService().toggleSavePuzzle(widget.puzzle.id);
+    if (mounted) {
+      setState(() => _isSaved = nowSaved);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(nowSaved ? 'Puzzle bookmarked!' : 'Puzzle bookmark removed', style: GoogleFonts.montserrat()),
+          backgroundColor: const Color(0xFFD4AF37),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _initPuzzle() {
@@ -278,9 +300,19 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, color: Colors.white70),
-                        onPressed: _resetPuzzle,
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: const Color(0xFFD4AF37)),
+                            onPressed: _toggleSave,
+                            tooltip: _isSaved ? "Remove Bookmark" : "Save Puzzle",
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh, color: Colors.white70),
+                            onPressed: _resetPuzzle,
+                            tooltip: "Reset Puzzle",
+                          ),
+                        ],
                       ),
                     ],
                   ),

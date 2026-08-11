@@ -21,6 +21,7 @@ import 'platform_asset_image.dart';
 import '../core/ai_engine.dart';
 import '../core/settings_controller.dart';
 import '../core/tournament_service.dart';
+import '../core/position_storage_service.dart';
 
 class BoardScreen extends StatefulWidget {
   final GameSettings settings;
@@ -33,6 +34,7 @@ class BoardScreen extends StatefulWidget {
   final String? tournamentId;
   final int? roundNumber;
   final bool isSpectator;
+  final String? initialFen;
 
   const BoardScreen({
     super.key, 
@@ -46,6 +48,7 @@ class BoardScreen extends StatefulWidget {
     this.tournamentId,
     this.roundNumber,
     this.isSpectator = false,
+    this.initialFen,
   });
 
   @override
@@ -82,11 +85,21 @@ class _BoardScreenState extends State<BoardScreen> {
     
     // Initialize GameState first
     final board = DynamoBoard();
-    board.initializeBoard();
-    _gameState = GameState(
-      board: board,
-      settings: widget.settings, 
-    );
+    if (widget.initialFen != null && widget.initialFen!.isNotEmpty) {
+      board.grid = FenConverter.fromFen(widget.initialFen!);
+      final turn = FenConverter.getTurn(widget.initialFen!);
+      _gameState = GameState(
+        board: board,
+        turn: turn,
+        settings: widget.settings,
+      );
+    } else {
+      board.initializeBoard();
+      _gameState = GameState(
+        board: board,
+        settings: widget.settings,
+      );
+    }
     
     // Systematic precaching for instant display - wrapped in post-frame to avoid MediaQuery error in initState
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -241,8 +254,32 @@ class _BoardScreenState extends State<BoardScreen> {
         debugPrint('🤖 AI: Executing move from ${bestMove.start} to ${bestMove.end}');
         setState(() {
           _isAiThinking = false;
-          _onSquareTapped(bestMove.start, isAiTap: true); // Select
-          _onSquareTapped(bestMove.end, isAiTap: true);   // Move
+          _gameState.handleSquareTap(
+            bestMove.start,
+            (msg) {},
+            (p) {},
+            onMoveMade: () {},
+          );
+          _gameState.handleSquareTap(
+            bestMove.end,
+            (message) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(message, style: GoogleFonts.montserrat()),
+                    backgroundColor: const Color(0xFFD4AF37),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            (promotionPos) {
+              _showPromotionDialog(promotionPos);
+            },
+            onMoveMade: () {
+              _onMoveCompleted();
+            },
+          );
         });
       } else if (mounted) {
         debugPrint('🤖 AI: No move found or unmounted');
@@ -658,9 +695,9 @@ class _BoardScreenState extends State<BoardScreen> {
     return ListTile(
       title: Text(label, style: GoogleFonts.montserrat(color: Colors.white)),
       onTap: () {
+        _gameState.finalizePromotion(type);
+        Navigator.of(context).pop();
         setState(() {
-          _gameState.finalizePromotion(type);
-          Navigator.of(context).pop();
           _onMoveCompleted();
         });
       },
@@ -782,8 +819,8 @@ class _BoardScreenState extends State<BoardScreen> {
                                       final y = (details.localPosition.dy / squareSize).floor();
                                       print("SQUARE: ($x, $y)");
                                       _onSquareTapped(Position(
-                                        widget.onlineRoomId != null && !widget.isWhite ? 9 - x : x,
-                                        widget.onlineRoomId != null && !widget.isWhite ? 9 - y : y,
+                                        !widget.isWhite ? 9 - x : x,
+                                        !widget.isWhite ? 9 - y : y,
                                       ));
                                     },
                                     child: Container(
@@ -815,7 +852,7 @@ class _BoardScreenState extends State<BoardScreen> {
                                                 checkPos: RulesEngine.isCheck(_gameState.turn, _gameState.board) 
                                                    ? _findKing(_gameState.turn) 
                                                    : null,
-                                                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                                                isWhite: widget.isWhite,
                                                 theme: _settings.boardTheme,
                                               ),
                                             ),
@@ -835,7 +872,7 @@ class _BoardScreenState extends State<BoardScreen> {
                                               painter: BoardForegroundPainter(
                                                 board: _gameState.board,
                                                 validMoves: _settings.showLegalMoves ? _gameState.validMoves : [],
-                                                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                                                isWhite: widget.isWhite,
                                               ),
                                             ),
                                           ),
@@ -867,6 +904,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
                           // Bottom Controls
                           BottomControls(
+                            onSavePosition: _handleSavePosition,
                             onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim, // Draw claim logic for online matches pending
                             canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
                             onChat: (widget.onlineRoomId != null && !widget.isSpectator) ? _showChat : null,
@@ -978,7 +1016,7 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   Widget _buildDesktopLayout(BoxConstraints constraints) {
-    final bool amIWhite = widget.onlineRoomId == null ? true : widget.isWhite;
+    final bool amIWhite = widget.isWhite;
     final PlayerColor topColor = amIWhite ? PlayerColor.black : PlayerColor.white;
     final PlayerColor bottomColor = amIWhite ? PlayerColor.white : PlayerColor.black;
     final Duration topTime = topColor == PlayerColor.white ? _gameState.whiteTime : _gameState.blackTime;
@@ -1080,6 +1118,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: BottomControls(
+                      onSavePosition: _handleSavePosition,
                       onDrawClaim: widget.onlineRoomId != null ? null : _handleDrawClaim,
                       canClaimDraw: _gameState.repetitionHistory.values.any((count) => count >= 3) || _gameState.fiftyMoveCounter >= 100,
                       onChat: (widget.onlineRoomId != null && !widget.isSpectator) ? _showChat : null,
@@ -1104,8 +1143,8 @@ class _BoardScreenState extends State<BoardScreen> {
         final x = (details.localPosition.dx / squareSize).floor();
         final y = (details.localPosition.dy / squareSize).floor();
         _onSquareTapped(Position(
-          widget.onlineRoomId != null && !widget.isWhite ? 9 - x : x,
-          widget.onlineRoomId != null && !widget.isWhite ? 9 - y : y,
+          !widget.isWhite ? 9 - x : x,
+          !widget.isWhite ? 9 - y : y,
         ));
       },
       child: Stack(
@@ -1131,7 +1170,7 @@ class _BoardScreenState extends State<BoardScreen> {
                 checkPos: RulesEngine.isCheck(_gameState.turn, _gameState.board) 
                    ? _findKing(_gameState.turn) 
                    : null,
-                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                isWhite: widget.isWhite,
                 theme: _settings.boardTheme,
               ),
             ),
@@ -1151,7 +1190,7 @@ class _BoardScreenState extends State<BoardScreen> {
               painter: BoardForegroundPainter(
                 board: _gameState.board,
                 validMoves: _settings.showLegalMoves ? _gameState.validMoves : [],
-                isWhite: widget.onlineRoomId == null ? true : widget.isWhite,
+                isWhite: widget.isWhite,
               ),
             ),
           ),
@@ -1217,24 +1256,28 @@ class _BoardScreenState extends State<BoardScreen> {
     final endFile = String.fromCharCode(97 + move.end.x);
     final endRank = 10 - move.end.y;
     
-    String p = '';
-    if (move.pieceType == PieceType.king) p = 'K';
-    else if (move.pieceType == PieceType.queen) p = 'Q';
-    else if (move.pieceType == PieceType.missile) p = 'M';
-    else if (move.pieceType == PieceType.rook) p = 'R';
-    else if (move.pieceType == PieceType.bishop) p = 'B';
-    else if (move.pieceType == PieceType.knight) p = 'N';
-
     String moveText;
-    if (move.isCapture) {
-      if (move.pieceType == PieceType.pawn) {
-        final startFile = String.fromCharCode(97 + move.start.x);
-        moveText = "${startFile}x$endFile$endRank";
-      } else {
-        moveText = "${p}x$endFile$endRank";
-      }
+    if (move.pieceType == PieceType.king && (move.end.x - move.start.x).abs() >= 2) {
+      moveText = move.end.x > move.start.x ? "0-0" : "0-0-0";
     } else {
-      moveText = "$p$endFile$endRank";
+      String p = '';
+      if (move.pieceType == PieceType.king) p = 'K';
+      else if (move.pieceType == PieceType.queen) p = 'Q';
+      else if (move.pieceType == PieceType.missile) p = 'M';
+      else if (move.pieceType == PieceType.rook) p = 'R';
+      else if (move.pieceType == PieceType.bishop) p = 'B';
+      else if (move.pieceType == PieceType.knight) p = 'N';
+
+      if (move.isCapture) {
+        if (move.pieceType == PieceType.pawn) {
+          final startFile = String.fromCharCode(97 + move.start.x);
+          moveText = "${startFile}x$endFile$endRank";
+        } else {
+          moveText = "${p}x$endFile$endRank";
+        }
+      } else {
+        moveText = "$p$endFile$endRank";
+      }
     }
 
     final isLastMove = index == _gameState.history.length - 1;
@@ -1576,24 +1619,28 @@ class _BoardScreenState extends State<BoardScreen> {
                 final endFile = String.fromCharCode(97 + move.end.x);
                 final endRank = 10 - move.end.y;
                 
-                String p = '';
-                if (move.pieceType == PieceType.king) p = 'K';
-                else if (move.pieceType == PieceType.queen) p = 'Q';
-                else if (move.pieceType == PieceType.missile) p = 'M';
-                else if (move.pieceType == PieceType.rook) p = 'R';
-                else if (move.pieceType == PieceType.bishop) p = 'B';
-                else if (move.pieceType == PieceType.knight) p = 'N';
-
                 String moveText;
-                if (move.isCapture) {
-                  if (move.pieceType == PieceType.pawn) {
-                    final startFile = String.fromCharCode(97 + move.start.x);
-                    moveText = "${startFile}x$endFile$endRank";
-                  } else {
-                    moveText = "${p}x$endFile$endRank";
-                  }
+                if (move.pieceType == PieceType.king && (move.end.x - move.start.x).abs() >= 2) {
+                  moveText = move.end.x > move.start.x ? "0-0" : "0-0-0";
                 } else {
-                  moveText = "$p$endFile$endRank";
+                  String p = '';
+                  if (move.pieceType == PieceType.king) p = 'K';
+                  else if (move.pieceType == PieceType.queen) p = 'Q';
+                  else if (move.pieceType == PieceType.missile) p = 'M';
+                  else if (move.pieceType == PieceType.rook) p = 'R';
+                  else if (move.pieceType == PieceType.bishop) p = 'B';
+                  else if (move.pieceType == PieceType.knight) p = 'N';
+
+                  if (move.isCapture) {
+                    if (move.pieceType == PieceType.pawn) {
+                      final startFile = String.fromCharCode(97 + move.start.x);
+                      moveText = "${startFile}x$endFile$endRank";
+                    } else {
+                      moveText = "${p}x$endFile$endRank";
+                    }
+                  } else {
+                    moveText = "$p$endFile$endRank";
+                  }
                 }
 
                 return Container(
@@ -1649,12 +1696,83 @@ class _BoardScreenState extends State<BoardScreen> {
       _gameState.claimDraw();
     });
   }
+
+  void _handleSavePosition() {
+    final fen = FenConverter.toFen(_gameState.board.grid, _gameState.turn);
+    final titleController = TextEditingController(text: "Position ${_gameState.history.length ~/ 2 + 1}");
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        title: Text(
+          'SAVE POSITION',
+          style: GoogleFonts.cinzel(
+            color: const Color(0xFFD4AF37),
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Save this board state to practice or analyze later.',
+              style: GoogleFonts.montserrat(color: Colors.white70, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: titleController,
+              style: GoogleFonts.montserrat(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Position Name',
+                labelStyle: GoogleFonts.montserrat(color: Colors.white54),
+                enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD4AF37))),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('CANCEL', style: GoogleFonts.montserrat(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await PositionStorageService().savePosition(titleController.text, fen);
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Position saved successfully!', style: GoogleFonts.montserrat()),
+                    backgroundColor: const Color(0xFFD4AF37),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+            ),
+            child: Text('SAVE', style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
   
   Widget _buildBoardBackground(double squareSize, {String theme = 'classic', bool showCoords = true}) {
     final colors = _getThemeColors(theme);
     final lightColor = colors['light']!;
     final darkColor = colors['dark']!;
-    final bool amIWhite = widget.onlineRoomId == null ? true : widget.isWhite;
+    final bool amIWhite = widget.isWhite;
 
     return Container(
       width: squareSize * 10,
@@ -1744,7 +1862,7 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   Widget _buildPiecesLayer(double squareSize) {
-    final bool amIWhite = widget.onlineRoomId == null ? true : widget.isWhite;
+    final bool amIWhite = widget.isWhite;
     return Column(
       mainAxisSize: MainAxisSize.max,
       children: List.generate(10, (rawY) {

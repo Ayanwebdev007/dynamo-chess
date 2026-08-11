@@ -317,7 +317,10 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
                     String moveText;
                     final endFile = String.fromCharCode(97 + toX);
                     final endRank = 10 - toY;
-                    if (isCapture) {
+
+                    if (piece?.type == PieceType.king && (toX - fromX).abs() >= 2) {
+                      moveText = toX > fromX ? "0-0" : "0-0-0";
+                    } else if (isCapture) {
                        if (piece?.type == PieceType.pawn) {
                           final startFile = String.fromCharCode(97 + fromX);
                           moveText = "${startFile}x$endFile$endRank";
