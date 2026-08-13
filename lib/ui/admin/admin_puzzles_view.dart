@@ -182,9 +182,26 @@ class _AdminPuzzlesViewState extends State<AdminPuzzlesView> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: () => _confirmDelete(p),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: Color(0xFFD4AF37)),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AdminPuzzleCreator(existingPuzzle: p),
+                        ),
+                      );
+                    },
+                    tooltip: "Edit Puzzle",
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    onPressed: () => _confirmDelete(p),
+                    tooltip: "Delete Puzzle",
+                  ),
+                ],
               ),
             ],
           ),

@@ -11,7 +11,8 @@ import '../platform_asset_image.dart';
 enum CreatorStep { setup, recording, review }
 
 class AdminPuzzleCreator extends StatefulWidget {
-  const AdminPuzzleCreator({super.key});
+  final Puzzle? existingPuzzle;
+  const AdminPuzzleCreator({super.key, this.existingPuzzle});
 
   @override
   State<AdminPuzzleCreator> createState() => _AdminPuzzleCreatorState();
@@ -22,7 +23,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _fenController = TextEditingController();
-  
+  final _prevStartController = TextEditingController();
+  final _prevEndController = TextEditingController();
+
   CreatorStep _step = CreatorStep.setup;
   PlayerColor _startTurn = PlayerColor.white;
   int _movesToWin = 1;
@@ -37,6 +40,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
   Position? _selectedPosition;
   List<Position> _validMoves = [];
   final List<PuzzleMove> _recordedMoves = [];
+  List<PuzzleMove> _mainSolutionMoves = [];
+  final List<List<PuzzleMove>> _alternativeSolutions = [];
+  int _recordingLineIndex = 0; // 0 = main line, 1+ = alt line
   String _initialFen = '';
 
   // Review Playback State
@@ -45,11 +51,46 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
   Position? _lastMoveEnd;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.existingPuzzle != null) {
+      final p = widget.existingPuzzle!;
+      _titleController.text = p.title;
+      _descController.text = p.description;
+      _startTurn = p.startTurn;
+      _movesToWin = p.movesToWin;
+      _initialFen = p.initialFen;
+      _board.grid = FenConverter.fromFen(p.initialFen);
+      _mainSolutionMoves = List.from(p.solutionMoves);
+      _alternativeSolutions.addAll(p.alternativeSolutions.map((line) => List<PuzzleMove>.from(line)));
+      if (p.previousMove != null) {
+        _prevStartController.text = _toCoord(p.previousMove!.start);
+        _prevEndController.text = _toCoord(p.previousMove!.end);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
     _fenController.dispose();
+    _prevStartController.dispose();
+    _prevEndController.dispose();
     super.dispose();
+  }
+
+  Position? _parseCoord(String input) {
+    input = input.trim().toLowerCase();
+    if (input.length < 2) return null;
+    final fileChar = input[0];
+    final rankStr = input.substring(1);
+    final files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    final x = files.indexOf(fileChar);
+    final rank = int.tryParse(rankStr);
+    if (x == -1 || rank == null || rank < 1 || rank > 10) return null;
+    final y = 10 - rank;
+    return Position(x, y);
   }
 
   void _onSquareTapped(Position pos) {
@@ -103,14 +144,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
             return;
           }
 
-          int limit = 20;
+          int limit = 19;
           if (type == PieceType.king) limit = 1;
           else if (type == PieceType.pawn) limit = 10;
-          else if (type == PieceType.queen) limit = 1;
-          else if (type == PieceType.missile) limit = 2;
-          else if (type == PieceType.rook) limit = 2;
-          else if (type == PieceType.bishop) limit = 2;
-          else if (type == PieceType.knight) limit = 2;
 
           if (typeCount >= limit) {
             ScaffoldMessenger.of(context).clearSnackBars();
@@ -148,7 +184,7 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
       });
     } else if (_step == CreatorStep.recording) {
       if (_validMoves.contains(pos) && _selectedPosition != null) {
-        _executeRecordMove(_selectedPosition!, pos);
+        _checkAndExecuteRecordMove(_selectedPosition!, pos);
         return;
       }
 
@@ -178,17 +214,75 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
     }
   }
 
-  void _executeRecordMove(Position start, Position end) {
+  void _checkAndExecuteRecordMove(Position start, Position end) {
+    final piece = _board.getPiece(start);
+    if (piece == null) return;
+
+    final isPromotion = piece.type == PieceType.pawn &&
+        ((piece.color == PlayerColor.white && end.y == 0) ||
+            (piece.color == PlayerColor.black && end.y == 9));
+
+    if (isPromotion) {
+      _showPromotionDialog((selectedType) {
+        _executeRecordMove(start, end, promotionPiece: selectedType);
+      });
+    } else {
+      _executeRecordMove(start, end);
+    }
+  }
+
+  void _showPromotionDialog(Function(PieceType) onSelect) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1),
+        ),
+        title: Text(
+          "PROMOTION",
+          style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37)),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _promotionOption(PieceType.queen, "QUEEN", onSelect),
+            _promotionOption(PieceType.missile, "MISSILE", onSelect),
+            _promotionOption(PieceType.rook, "ROOK", onSelect),
+            _promotionOption(PieceType.bishop, "BISHOP", onSelect),
+            _promotionOption(PieceType.knight, "KNIGHT", onSelect),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _promotionOption(PieceType type, String label, Function(PieceType) onSelect) {
+    return ListTile(
+      title: Text(label, style: GoogleFonts.montserrat(color: Colors.white)),
+      onTap: () {
+        Navigator.of(context).pop();
+        onSelect(type);
+      },
+    );
+  }
+
+  void _executeRecordMove(Position start, Position end, {PieceType? promotionPiece}) {
     final piece = _board.getPiece(start);
     if (piece == null) return;
 
     setState(() {
       // Execute on board
-      _board.setPiece(end, piece);
+      final finalPiece = promotionPiece != null
+          ? DynamoPiece(type: promotionPiece, color: piece.color)
+          : piece;
+      _board.setPiece(end, finalPiece);
       _board.setPiece(start, null);
 
       // Record move
-      _recordedMoves.add(PuzzleMove(start: start, end: end));
+      _recordedMoves.add(PuzzleMove(start: start, end: end, promotionPiece: promotionPiece));
 
       // Switch turn
       _currentTurn = (_currentTurn == PlayerColor.white)
@@ -201,6 +295,16 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
       // Check if recording is complete
       final requiredMovesCount = 2 * _movesToWin - 1;
       if (_recordedMoves.length >= requiredMovesCount) {
+        if (_recordingLineIndex == 0) {
+          _mainSolutionMoves = List.from(_recordedMoves);
+        } else {
+          final altIndex = _recordingLineIndex - 1;
+          if (altIndex < _alternativeSolutions.length) {
+            _alternativeSolutions[altIndex] = List.from(_recordedMoves);
+          } else {
+            _alternativeSolutions.add(List.from(_recordedMoves));
+          }
+        }
         _step = CreatorStep.review;
         _reviewMoveIndex = _recordedMoves.length;
         _updateReviewBoard();
@@ -217,8 +321,13 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
       _board.grid = FenConverter.fromFen(_initialFen);
       for (final mv in _recordedMoves) {
         final piece = _board.getPiece(mv.start);
-        _board.setPiece(mv.end, piece);
-        _board.setPiece(mv.start, null);
+        if (piece != null) {
+          final targetPiece = mv.promotionPiece != null
+              ? DynamoPiece(type: mv.promotionPiece!, color: piece.color)
+              : piece;
+          _board.setPiece(mv.end, targetPiece);
+          _board.setPiece(mv.start, null);
+        }
       }
 
       // Revert turn
@@ -294,21 +403,6 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
 
     if ((whiteTypes[PieceType.pawn] ?? 0) > 10) return "White has too many pawns (max 10).";
     if ((blackTypes[PieceType.pawn] ?? 0) > 10) return "Black has too many pawns (max 10).";
-    
-    if ((whiteTypes[PieceType.queen] ?? 0) > 1) return "White has too many queens (max 1).";
-    if ((blackTypes[PieceType.queen] ?? 0) > 1) return "Black has too many queens (max 1).";
-
-    if ((whiteTypes[PieceType.missile] ?? 0) > 2) return "White has too many missiles (max 2).";
-    if ((blackTypes[PieceType.missile] ?? 0) > 2) return "Black has too many missiles (max 2).";
-
-    if ((whiteTypes[PieceType.rook] ?? 0) > 2) return "White has too many rooks (max 2).";
-    if ((blackTypes[PieceType.rook] ?? 0) > 2) return "Black has too many rooks (max 2).";
-
-    if ((whiteTypes[PieceType.bishop] ?? 0) > 2) return "White has too many bishops (max 2).";
-    if ((blackTypes[PieceType.bishop] ?? 0) > 2) return "Black has too many bishops (max 2).";
-
-    if ((whiteTypes[PieceType.knight] ?? 0) > 2) return "White has too many knights (max 2).";
-    if ((blackTypes[PieceType.knight] ?? 0) > 2) return "Black has too many knights (max 2).";
 
     // Inactive player's King cannot be in check
     final inactiveColor = (_startTurn == PlayerColor.white)
@@ -322,6 +416,12 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
     final hasMoves = RulesEngine.hasLegalMoves(_startTurn, _board);
     if (!hasMoves) {
       return "The starting player (${_startTurn.name.toUpperCase()}) has no legal moves (checkmate or stalemate).";
+    }
+
+    // Check if solution moves count matches Moves to Win target
+    final requiredMovesCount = 2 * _movesToWin - 1;
+    if (_mainSolutionMoves.isNotEmpty && _mainSolutionMoves.length != requiredMovesCount) {
+      return "Existing solution (${_mainSolutionMoves.length} moves) does not match 'Moves to Win' setting ($requiredMovesCount moves total). Please re-record solution.";
     }
 
     return null;
@@ -366,7 +466,8 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
   }
 
   void _reviewNext() {
-    if (_reviewMoveIndex < _recordedMoves.length) {
+    final activeMoves = _mainSolutionMoves.isNotEmpty ? _mainSolutionMoves : _recordedMoves;
+    if (_reviewMoveIndex < activeMoves.length) {
       setState(() {
         _reviewMoveIndex++;
         _updateReviewBoard();
@@ -375,16 +476,23 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
   }
 
   void _updateReviewBoard() {
+    final activeMoves = _mainSolutionMoves.isNotEmpty ? _mainSolutionMoves : _recordedMoves;
     _board.grid = FenConverter.fromFen(_initialFen);
     for (int i = 0; i < _reviewMoveIndex; i++) {
-      final mv = _recordedMoves[i];
+      if (i >= activeMoves.length) break;
+      final mv = activeMoves[i];
       final piece = _board.getPiece(mv.start);
-      _board.setPiece(mv.end, piece);
-      _board.setPiece(mv.start, null);
+      if (piece != null) {
+        final targetPiece = mv.promotionPiece != null
+            ? DynamoPiece(type: mv.promotionPiece!, color: piece.color)
+            : piece;
+        _board.setPiece(mv.end, targetPiece);
+        _board.setPiece(mv.start, null);
+      }
     }
-    if (_reviewMoveIndex > 0) {
-      _lastMoveStart = _recordedMoves[_reviewMoveIndex - 1].start;
-      _lastMoveEnd = _recordedMoves[_reviewMoveIndex - 1].end;
+    if (_reviewMoveIndex > 0 && _reviewMoveIndex <= activeMoves.length) {
+      _lastMoveStart = activeMoves[_reviewMoveIndex - 1].start;
+      _lastMoveEnd = activeMoves[_reviewMoveIndex - 1].end;
     } else {
       _lastMoveStart = null;
       _lastMoveEnd = null;
@@ -439,15 +547,48 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
     );
   }
 
+  void _startRecordingAlternativeLine() {
+    setState(() {
+      _board.grid = FenConverter.fromFen(_initialFen);
+      _currentTurn = _startTurn;
+      _step = CreatorStep.recording;
+      _recordedMoves.clear();
+      _recordingLineIndex = _alternativeSolutions.length + 1;
+      _selectedPosition = null;
+      _validMoves = [];
+      _lastMoveStart = null;
+      _lastMoveEnd = null;
+    });
+  }
+
+  void _deleteAlternativeLine(int index) {
+    setState(() {
+      _alternativeSolutions.removeAt(index);
+    });
+  }
+
   void _savePuzzle() async {
+    final mainMoves = _mainSolutionMoves.isNotEmpty ? _mainSolutionMoves : _recordedMoves;
+
+    PuzzleMove? prevMove;
+    final startPos = _parseCoord(_prevStartController.text);
+    final endPos = _parseCoord(_prevEndController.text);
+    if (startPos != null && endPos != null) {
+      prevMove = PuzzleMove(start: startPos, end: endPos);
+    }
+
+    final puzzleId = widget.existingPuzzle?.id ?? PuzzleService().generatePuzzleId();
+
     final puzzle = Puzzle(
-      id: PuzzleService().generatePuzzleId(),
+      id: puzzleId,
       title: _titleController.text.trim(),
       description: _descController.text.trim(),
       initialFen: _initialFen,
       movesToWin: _movesToWin,
       startTurn: _startTurn,
-      solutionMoves: _recordedMoves,
+      solutionMoves: mainMoves,
+      alternativeSolutions: _alternativeSolutions,
+      previousMove: prevMove,
     );
 
     try {
@@ -536,6 +677,74 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                             _buildTurnDropdown(),
                             const SizedBox(height: 24),
                             _buildMovesDropdown(),
+                            const SizedBox(height: 24),
+                            
+                            // Previous Move (Optional)
+                            Text(
+                              "PREVIOUS MOVE BEFORE PUZZLE (OPTIONAL)",
+                              style: GoogleFonts.cinzel(
+                                color: const Color(0xFFD4AF37),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              "Opponent's move right before puzzle turn (e.g. e7 to e5).",
+                              style: GoogleFonts.montserrat(color: Colors.white54, fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _prevStartController,
+                                    style: GoogleFonts.montserrat(color: Colors.white, fontSize: 13),
+                                    decoration: InputDecoration(
+                                      labelText: "Start Square",
+                                      labelStyle: GoogleFonts.montserrat(color: Colors.white54, fontSize: 12),
+                                      hintText: "e.g. e7",
+                                      hintStyle: GoogleFonts.montserrat(color: Colors.white24, fontSize: 12),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.02),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _prevEndController,
+                                    style: GoogleFonts.montserrat(color: Colors.white, fontSize: 13),
+                                    decoration: InputDecoration(
+                                      labelText: "End Square",
+                                      labelStyle: GoogleFonts.montserrat(color: Colors.white54, fontSize: 12),
+                                      hintText: "e.g. e5",
+                                      hintStyle: GoogleFonts.montserrat(color: Colors.white24, fontSize: 12),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.02),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 32),
                             
                             // FEN Actions
@@ -712,12 +921,36 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                                   ),
                                 ),
                                 child: Text(
-                                  "PROCEED TO RECORD SOLUTION",
+                                  _mainSolutionMoves.isNotEmpty ? "RE-RECORD SOLUTION MOVES" : "PROCEED TO RECORD SOLUTION",
                                   style: GoogleFonts.montserrat(
                                       fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
+                            if (_mainSolutionMoves.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 44,
+                                child: OutlinedButton(
+                                  onPressed: _getSetupValidationError() == null
+                                      ? () => setState(() => _step = CreatorStep.review)
+                                      : null,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white70,
+                                    side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    "SKIP TO PREVIEW & SAVE (KEEP EXISTING MOVES)",
+                                    style: GoogleFonts.montserrat(
+                                        fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                           
                           if (_step == CreatorStep.recording) ...[
@@ -792,7 +1025,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                             
                             // Moves history timeline list
                             Text(
-                              "RECORDED SEQUENCE",
+                              _recordedMoves.isNotEmpty
+                                  ? "RECORDED SEQUENCE"
+                                  : (_mainSolutionMoves.isNotEmpty ? "EARLIER SET SOLUTION MOVES" : "RECORDED SEQUENCE"),
                               style: GoogleFonts.cinzel(
                                 color: const Color(0xFFD4AF37),
                                 fontSize: 14,
@@ -800,7 +1035,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            _buildMovesHistoryList(),
+                            _buildMovesHistoryListFor(_recordedMoves.isNotEmpty
+                                ? _recordedMoves
+                                : (_mainSolutionMoves.isNotEmpty ? _mainSolutionMoves : [])),
                             const SizedBox(height: 32),
                             
                             // Control buttons
@@ -865,41 +1102,46 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                             const SizedBox(height: 24),
                             
                             // Playback controls widget
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.01),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.white.withOpacity(0.03)),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.navigate_before, color: Colors.white70, size: 32),
-                                    onPressed: _reviewMoveIndex > 0 ? _reviewPrev : null,
+                            Builder(
+                              builder: (context) {
+                                final activeMoves = _mainSolutionMoves.isNotEmpty ? _mainSolutionMoves : _recordedMoves;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.01),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white.withOpacity(0.03)),
                                   ),
-                                  const SizedBox(width: 24),
-                                  Text(
-                                    "Move $_reviewMoveIndex of ${_recordedMoves.length}",
-                                    style: GoogleFonts.montserrat(
-                                      color: const Color(0xFFD4AF37),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 15,
-                                    ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.navigate_before, color: Colors.white70, size: 32),
+                                        onPressed: _reviewMoveIndex > 0 ? _reviewPrev : null,
+                                      ),
+                                      const SizedBox(width: 24),
+                                      Text(
+                                        "Move $_reviewMoveIndex of ${activeMoves.length}",
+                                        style: GoogleFonts.montserrat(
+                                          color: const Color(0xFFD4AF37),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 24),
+                                      IconButton(
+                                        icon: const Icon(Icons.navigate_next, color: Colors.white70, size: 32),
+                                        onPressed: _reviewMoveIndex < activeMoves.length ? _reviewNext : null,
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 24),
-                                  IconButton(
-                                    icon: const Icon(Icons.navigate_next, color: Colors.white70, size: 32),
-                                    onPressed: _reviewMoveIndex < _recordedMoves.length ? _reviewNext : null,
-                                  ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 32),
                             
-                            Text(
-                              "RECORDED SEQUENCE",
+                             Text(
+                              "MAIN SOLUTION LINE",
                               style: GoogleFonts.cinzel(
                                 color: const Color(0xFFD4AF37),
                                 fontSize: 14,
@@ -907,8 +1149,71 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            _buildMovesHistoryList(),
-                            const SizedBox(height: 40),
+                            _buildMovesHistoryListFor(_mainSolutionMoves.isNotEmpty ? _mainSolutionMoves : _recordedMoves),
+                            const SizedBox(height: 24),
+                            if (_alternativeSolutions.isNotEmpty) ...[
+                              Text(
+                                "ALTERNATIVE VARIATION LINES",
+                                style: GoogleFonts.cinzel(
+                                  color: const Color(0xFFD4AF37),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              ...List.generate(_alternativeSolutions.length, (altIdx) {
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.02),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            "Variation ${altIdx + 2}",
+                                            style: GoogleFonts.montserrat(
+                                              color: const Color(0xFFD4AF37),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                            onPressed: () => _deleteAlternativeLine(altIdx),
+                                          ),
+                                        ],
+                                      ),
+                                      _buildMovesHistoryListFor(_alternativeSolutions[altIdx]),
+                                    ],
+                                  ),
+                                );
+                              }),
+                              const SizedBox(height: 16),
+                            ],
+                            SizedBox(
+                              width: double.infinity,
+                              height: 44,
+                              child: OutlinedButton.icon(
+                                onPressed: _startRecordingAlternativeLine,
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text("+ ADD ALTERNATIVE SOLUTION LINE"),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFD4AF37),
+                                  side: const BorderSide(color: Color(0xFFD4AF37)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 32),
                             
                             // Publish buttons
                             SizedBox(
@@ -1039,40 +1344,53 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
       stepColor = Colors.greenAccent;
     }
 
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: stepColor.withOpacity(0.1),
-            border: Border.all(color: stepColor, width: 2),
-          ),
-          child: Center(
-            child: isDone
-                ? const Icon(Icons.check, size: 16, color: Colors.greenAccent)
-                : Text(
-                    "$number",
-                    style: GoogleFonts.montserrat(
-                      color: stepColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-          ),
+    return InkWell(
+      onTap: () {
+        if (_getSetupValidationError() == null) {
+          setState(() {
+            _step = step;
+          });
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: stepColor.withOpacity(0.1),
+                border: Border.all(color: stepColor, width: 2),
+              ),
+              child: Center(
+                child: isDone
+                    ? const Icon(Icons.check, size: 16, color: Colors.greenAccent)
+                    : Text(
+                        "$number",
+                        style: GoogleFonts.montserrat(
+                          color: stepColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.cinzel(
+                color: isActive ? Colors.white : Colors.white54,
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: GoogleFonts.cinzel(
-            color: isActive ? Colors.white : Colors.white54,
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            letterSpacing: 1.0,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1172,7 +1490,7 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
           borderSide: const BorderSide(color: Color(0xFFD4AF37)),
         ),
       ),
-      items: List.generate(5, (index) => index + 1).map((m) {
+      items: List.generate(10, (index) => index + 1).map((m) {
         return DropdownMenuItem(
           value: m,
           child: Text("$m Move${m > 1 ? "s" : ""}", style: const TextStyle(color: Colors.white)),
@@ -1379,8 +1697,21 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
     );
   }
 
+  String _formatMoveText(PuzzleMove move) {
+    String text = "${_toCoord(move.start)} → ${_toCoord(move.end)}";
+    if (move.promotionPiece != null) {
+      final code = move.promotionPiece!.name.substring(0, 1).toUpperCase();
+      text += " (=$code)";
+    }
+    return text;
+  }
+
   Widget _buildMovesHistoryList() {
-    if (_recordedMoves.isEmpty) {
+    return _buildMovesHistoryListFor(_recordedMoves);
+  }
+
+  Widget _buildMovesHistoryListFor(List<PuzzleMove> moves) {
+    if (moves.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
@@ -1392,9 +1723,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
       );
     }
 
-    final pairsCount = (_recordedMoves.length / 2).ceil();
+    final pairsCount = (moves.length / 2).ceil();
     return Container(
-      height: 150,
+      constraints: const BoxConstraints(maxHeight: 150),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.01),
         borderRadius: BorderRadius.circular(12),
@@ -1409,9 +1740,9 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
           final whiteMoveIndex = index * 2;
           final blackMoveIndex = index * 2 + 1;
 
-          final whiteMove = _recordedMoves[whiteMoveIndex];
-          final blackMove = blackMoveIndex < _recordedMoves.length
-              ? _recordedMoves[blackMoveIndex]
+          final whiteMove = moves[whiteMoveIndex];
+          final blackMove = blackMoveIndex < moves.length
+              ? moves[blackMoveIndex]
               : null;
 
           return Padding(
@@ -1431,7 +1762,7 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                 ),
                 Expanded(
                   child: Text(
-                    "${_toCoord(whiteMove.start)} → ${_toCoord(whiteMove.end)}",
+                    _formatMoveText(whiteMove),
                     style: GoogleFonts.montserrat(
                       color: Colors.white70,
                       fontSize: 13,
@@ -1441,7 +1772,7 @@ class _AdminPuzzleCreatorState extends State<AdminPuzzleCreator> {
                 if (blackMove != null)
                   Expanded(
                     child: Text(
-                      "${_toCoord(blackMove.start)} → ${_toCoord(blackMove.end)}",
+                      _formatMoveText(blackMove),
                       style: GoogleFonts.montserrat(
                         color: Colors.white60,
                         fontSize: 13,
