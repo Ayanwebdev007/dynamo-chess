@@ -23,6 +23,7 @@ import 'ruleset_screen.dart';
 import 'tournament_list_screen.dart';
 import 'store_screen.dart';
 import '../core/navigation_helper.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 
 enum ColorSelection { white, black, random, alternate }
@@ -311,6 +312,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       height: 1.8,
                     ),
                   ),
+                  const SizedBox(height: 36),
+                  _buildGooglePlayBadge(),
                 ],
               ),
             ),
@@ -555,6 +558,31 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               const SizedBox(height: 40),
               _buildStartButton(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openPlayStore() {
+    openExternalUrl('https://play.google.com/store/apps/details?id=in.advancedchess');
+  }
+
+  Widget _buildGooglePlayBadge() {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openPlayStore,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Image.asset(
+              'assets/google_play_badge.png',
+              height: 60,
+              fit: BoxFit.contain,
+            ),
           ),
         ),
       ),

@@ -20,6 +20,7 @@ dependencies:
   shared_preferences: ^2.2.2
   googleapis_auth: ^1.4.1
   http: ^1.2.1
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
@@ -38,6 +39,7 @@ flutter:
     - assets/sounds/
     - assets/store/
     - assets/dynamo_logo.png
+    - assets/google_play_badge.png
     - assets/noflag.png
     - assets/inflag.png
     - assets/service_account.json
