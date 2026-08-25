@@ -44,11 +44,11 @@ class AIEngine {
   }
 
   /// Main entry point for the AI to pick a move
-  static Future<Move?> getBestMove(DynamoBoard board, PlayerColor aiColor, int depth) async {
+  static Future<Move?> getBestMove(DynamoBoard board, PlayerColor aiColor, int depth, {MoveRecord? lastMove}) async {
     Move? bestMove;
     int bestValue = -_infinity;
     
-    final allMoves = _getAllLegalMoves(board, aiColor);
+    final allMoves = _getAllLegalMoves(board, aiColor, lastMove: lastMove);
     if (allMoves.isEmpty) return null;
 
     // Move Ordering: Evaluate captures first to improve pruning
@@ -178,14 +178,14 @@ class AIEngine {
     return totalEvaluation;
   }
 
-  static List<Move> _getAllLegalMoves(DynamoBoard board, PlayerColor color) {
+  static List<Move> _getAllLegalMoves(DynamoBoard board, PlayerColor color, {MoveRecord? lastMove}) {
     final List<Move> moves = [];
     for (int y = 0; y < 10; y++) {
       for (int x = 0; x < 10; x++) {
         final start = Position(x, y);
         final piece = board.getPiece(start);
         if (piece != null && piece.color == color) {
-          final legalEnds = RulesEngine.getLegalMoves(start, board);
+          final legalEnds = RulesEngine.getLegalMoves(start, board, lastMove: lastMove);
           for (var end in legalEnds) {
             moves.add(Move(start: start, end: end));
           }

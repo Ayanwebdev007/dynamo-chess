@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/models.dart';
 import '../core/fen_converter.dart';
+import '../core/pgn_service.dart';
 import 'platform_asset_image.dart';
+import 'pgn_dialog.dart';
 
 class GameReviewScreen extends StatefulWidget {
   final Map<String, dynamic> gameData;
@@ -26,6 +28,7 @@ class GameReviewScreen extends StatefulWidget {
 
 class _GameReviewScreenState extends State<GameReviewScreen> {
   late List<Map<String, dynamic>> _moves;
+  List<String> _formattedMoves = [];
   int _currentMoveIndex = -1; // -1 means starting position
   late String _startingFen;
   final ScrollController _scrollController = ScrollController();
@@ -33,8 +36,10 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
   @override
   void initState() {
     super.initState();
-    // Correct 10x10 starting FEN without spaces in the board part
-    _startingFen = "rnbqmmqbnr/pppppppppp/10/10/10/10/10/10/PPPPPPPPPP/RNBQMMQBNR w - -";
+    // Correct 10x10 starting FEN matching Dynamo Chess piece order:
+    // Rook, Knight, Bishop, Missile (Dynamo), Queen, King, Missile (Dynamo), Bishop, Knight, Rook
+    _startingFen = widget.gameData['initialFen']?.toString() ??
+        "rnbmqkmbnr/pppppppppp/10/10/10/10/10/10/PPPPPPPPPP/RNBMQKMBNR w - -";
     _parseMoves();
   }
 
@@ -55,6 +60,67 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
     if (_moves.isNotEmpty) {
       _currentMoveIndex = _moves.length - 1;
     }
+    _formattedMoves = PgnService.getFormattedMovesList(_buildMoveRecords(), initialFen: _startingFen);
+  }
+
+  List<MoveRecord> _buildMoveRecords() {
+    List<MoveRecord> records = [];
+    for (int i = 0; i < _moves.length; i++) {
+      final move = _moves[i];
+      final fromMap = move['from'] as Map?;
+      final toMap = move['to'] as Map?;
+      if (fromMap == null || toMap == null) continue;
+
+      final fromX = fromMap['x'] as int;
+      final fromY = fromMap['y'] as int;
+      final toX = toMap['x'] as int;
+      final toY = toMap['y'] as int;
+
+      final prevFen = i == 0 ? _startingFen : _moves[i - 1]['fen'] as String;
+      final prevBoard = FenConverter.fromFen(prevFen);
+      final piece = prevBoard[fromY][fromX];
+      final targetPiece = prevBoard[toY][toX];
+      final isCapture = targetPiece != null || (piece?.type == PieceType.pawn && fromX != toX);
+
+      PieceType pieceType = piece?.type ?? PieceType.pawn;
+      if (move['pieceType'] != null) {
+        final ptStr = move['pieceType'].toString().toLowerCase();
+        pieceType = PieceType.values.firstWhere(
+          (t) => t.name == ptStr,
+          orElse: () => piece?.type ?? PieceType.pawn,
+        );
+      }
+
+      records.add(MoveRecord(
+        start: Position(fromX, fromY),
+        end: Position(toX, toY),
+        pieceType: pieceType,
+        isCapture: isCapture,
+        capturedPieceType: targetPiece?.type,
+      ));
+    }
+    return records;
+  }
+
+  void _showPgnDialog() {
+    final isWhite = widget.myColor == 'white';
+    final whiteName = widget.whitePlayerName ?? (isWhite ? "You" : widget.opponentName);
+    final blackName = widget.blackPlayerName ?? (isWhite ? widget.opponentName : "You");
+    final result = widget.gameData['result']?.toString() ?? 'draw';
+    final method = widget.gameData['method']?.toString() ?? 'normal';
+
+    showDialog(
+      context: context,
+      builder: (context) => PgnDialog(
+        whitePlayer: whiteName,
+        blackPlayer: blackName,
+        result: result,
+        history: _buildMoveRecords(),
+        event: "Dynamo Chess Match Review",
+        termination: method,
+        initialFen: _startingFen,
+      ),
+    );
   }
 
   String get _currentFen {
@@ -76,6 +142,13 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white70),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download_outlined, color: Color(0xFFD4AF37)),
+            tooltip: "Export PGN",
+            onPressed: _showPgnDialog,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -173,6 +246,8 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
     );
   }
 
+  bool get isUserWhite => widget.myColor.toLowerCase() != 'black';
+
   Widget _buildBoard(List<List<DynamoPiece?>> board) {
     return AspectRatio(
       aspectRatio: 1.0,
@@ -196,10 +271,12 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
               ),
               itemCount: 100,
               itemBuilder: (context, index) {
-                final x = index % 10;
-                final y = (index / 10).floor();
+                final rawX = index % 10;
+                final rawY = (index / 10).floor();
+                final x = isUserWhite ? rawX : 9 - rawX;
+                final y = isUserWhite ? rawY : 9 - rawY;
                 final piece = board[y][x];
-                final isDark = (x + y) % 2 != 0;
+                final isDark = (rawX + rawY) % 2 != 0;
                 
                 return Container(
                   color: isDark ? const Color(0xFF779556) : const Color(0xFFEBECD0),
@@ -231,13 +308,14 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
   Widget _buildMoveHistoryList({required bool isMobile}) {
     return Container(
       margin: EdgeInsets.all(isMobile ? 12 : 16),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.02),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
@@ -245,97 +323,84 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("MOVE LOG", style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: isMobile ? 12 : 14, fontWeight: FontWeight.bold)),
-                if (_moves.isEmpty)
+                Text(
+                  "MOVE LOG",
+                  style: GoogleFonts.cinzel(
+                    color: const Color(0xFFD4AF37),
+                    fontSize: isMobile ? 12 : 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (_moves.isNotEmpty)
+                  Text(
+                    "${_moves.length} moves",
+                    style: GoogleFonts.montserrat(color: Colors.white38, fontSize: 11),
+                  )
+                else
                   const Icon(Icons.history_toggle_off, color: Colors.white24, size: 16),
               ],
             ),
           ),
           const Divider(height: 1, color: Colors.white12),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: isMobile ? 300 : 600),
-            child: _moves.isEmpty 
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.info_outline, color: Colors.white24, size: 32),
-                        const SizedBox(height: 16),
-                        Text(
-                          "HISTORY NOT RECORDED",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.montserrat(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Match DNA recording was enabled today.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.montserrat(color: Colors.white12, fontSize: 8),
-                        ),
-                      ],
-                    ),
-                  ),
+          isMobile
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 280),
+                  child: _buildMoveListView(),
                 )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  controller: _scrollController,
-                  itemCount: _moves.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return _buildMoveItem(-1, "STARTING POSITION", "");
-                    }
-                    final move = _moves[index - 1];
-                    final from = Map<String, dynamic>.from(move['from']);
-                    final to = Map<String, dynamic>.from(move['to']);
-                    final fromX = (from['x'] as num).toInt();
-                    final fromY = (from['y'] as num).toInt();
-                    final toX = (to['x'] as num).toInt();
-                    final toY = (to['y'] as num).toInt();
-                    final String prevFen = (index - 1) == 0 ? _startingFen : _moves[index - 2]['fen'];
-                    final prevBoard = FenConverter.fromFen(prevFen);
-                    final piece = prevBoard[fromY][fromX];
-                    
-                    String p = '';
-                    if (piece != null) {
-                      if (piece.type == PieceType.king) p = 'K';
-                      else if (piece.type == PieceType.queen) p = 'Q';
-                      else if (piece.type == PieceType.missile) p = 'M';
-                      else if (piece.type == PieceType.rook) p = 'R';
-                      else if (piece.type == PieceType.bishop) p = 'B';
-                      else if (piece.type == PieceType.knight) p = 'N';
-                    }
-                    
-                    bool isCapture = false;
-                    if (piece != null && prevBoard[toY][toX] != null) {
-                      isCapture = true;
-                    } else if (piece?.type == PieceType.pawn && fromX != toX) {
-                      isCapture = true;
-                    }
-                    
-                    String moveText;
-                    final endFile = String.fromCharCode(97 + toX);
-                    final endRank = 10 - toY;
-
-                    if (piece?.type == PieceType.king && (toX - fromX).abs() >= 2) {
-                      moveText = toX > fromX ? "0-0" : "0-0-0";
-                    } else if (isCapture) {
-                       if (piece?.type == PieceType.pawn) {
-                          final startFile = String.fromCharCode(97 + fromX);
-                          moveText = "${startFile}x$endFile$endRank";
-                       } else {
-                          moveText = "${p}x$endFile$endRank";
-                       }
-                    } else {
-                       moveText = "$p$endFile$endRank";
-                    }
-                    return _buildMoveItem(index - 1, moveText, move['player']?.toString().toUpperCase() ?? "");
-                  },
+              : Expanded(
+                  child: _buildMoveListView(),
                 ),
-          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMoveListView() {
+    if (_moves.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white24, size: 32),
+              const SizedBox(height: 16),
+              Text(
+                "HISTORY NOT RECORDED",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(
+                  color: Colors.white24,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Match DNA recording was enabled today.",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(color: Colors.white12, fontSize: 8),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      physics: const ClampingScrollPhysics(),
+      padding: EdgeInsets.zero,
+      itemCount: _moves.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return _buildMoveItem(-1, "STARTING POSITION", "");
+        }
+        final move = _moves[index - 1];
+        final moveText = (index - 1) < _formattedMoves.length
+            ? _formattedMoves[index - 1]
+            : "Move $index";
+        return _buildMoveItem(index - 1, moveText, move['player']?.toString().toUpperCase() ?? "");
+      },
     );
   }
 
@@ -344,18 +409,54 @@ class _GameReviewScreenState extends State<GameReviewScreen> {
     return InkWell(
       onTap: () => setState(() => _currentMoveIndex = index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.1) : Colors.transparent,
-          border: Border(left: BorderSide(color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent, width: 3)),
+          color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.12) : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent,
+              width: 3,
+            ),
+          ),
         ),
         child: Row(
           children: [
-            Text(index == -1 ? "0." : "${(index / 2).floor() + 1}.", style: const TextStyle(color: Colors.white24, fontSize: 12)),
-            const SizedBox(width: 12),
-            Expanded(child: Text(text, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))),
+            SizedBox(
+              width: 28,
+              child: Text(
+                index == -1 ? "•" : "${(index / 2).floor() + 1}.",
+                style: GoogleFonts.robotoMono(color: Colors.white38, fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.robotoMono(
+                  color: isSelected ? const Color(0xFFD4AF37) : Colors.white,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
             if (player.isNotEmpty)
-              Text(player, style: TextStyle(color: player == "WHITE" ? Colors.white38 : Colors.black38, fontSize: 9, fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  player,
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white60,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

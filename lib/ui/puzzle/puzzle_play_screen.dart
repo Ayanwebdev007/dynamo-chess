@@ -32,14 +32,13 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   bool _isSolved = false;
   bool _madeWrongMove = false;
   int _userMoveCount = 0;
-  int _totalUserMoves = 0;
 
   // Selected Board State
   Position? _selectedPosition;
   List<Position> _validMoves = [];
   Position? _lastMoveStart;
   Position? _lastMoveEnd;
-  List<PuzzleMove>? _activeSolutionLine;
+  List<List<PuzzleMove>> _candidateSolutionLines = [];
 
   // Screen State
   bool _showSuccessOverlay = false;
@@ -47,15 +46,22 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   bool _isSaved = false;
 
   Timer? _autoPlayTimer;
+  Timer? _opponentTimer;
+  Timer? _failTimer;
 
   @override
   void dispose() {
     _autoPlayTimer?.cancel();
+    _opponentTimer?.cancel();
+    _failTimer?.cancel();
     super.dispose();
   }
 
+  bool get isUserWhite => widget.puzzle.startTurn == PlayerColor.white;
+
   String _toCoord(Position pos) {
     final files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    if (pos.x < 0 || pos.x >= 10 || pos.y < 0 || pos.y >= 10) return "??";
     final file = files[pos.x];
     final rank = 10 - pos.y;
     return '$file$rank';
@@ -322,17 +328,13 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   }
 
   void _initPuzzle() {
-    // Calculate total user moves: every other move starting from index 0
-    _totalUserMoves = 0;
-    for (int i = 0; i < widget.puzzle.solutionMoves.length; i++) {
-      // Even indices are user moves (0=user, 1=computer, 2=user, 3=computer...)
-      if (i % 2 == 0) _totalUserMoves++;
-    }
     _resetPuzzle();
   }
 
   void _resetPuzzle() {
     _autoPlayTimer?.cancel();
+    _opponentTimer?.cancel();
+    _failTimer?.cancel();
     setState(() {
       _board = DynamoBoard();
       _board.grid = FenConverter.fromFen(widget.puzzle.initialFen);
@@ -345,7 +347,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
       _showFailOverlay = false;
       _selectedPosition = null;
       _validMoves = [];
-      _activeSolutionLine = null;
+      _candidateSolutionLines = List.from(widget.puzzle.allSolutions);
       if (widget.puzzle.previousMove != null) {
         _lastMoveStart = widget.puzzle.previousMove!.start;
         _lastMoveEnd = widget.puzzle.previousMove!.end;
@@ -369,20 +371,34 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
     }
 
     final piece = _board.getPiece(pos);
-    if (piece != null && piece.color == _currentTurn) {
+    if (piece != null && piece.color == _currentTurn && _currentTurn == widget.puzzle.startTurn) {
+      MoveRecord? lastMoveRecord;
+      if (_currentMoveIndex > 0) {
+        final prevMove = _candidateSolutionLines.isNotEmpty
+            ? _candidateSolutionLines.first[_currentMoveIndex - 1]
+            : widget.puzzle.solutionMoves[_currentMoveIndex - 1];
+        lastMoveRecord = MoveRecord(
+          start: prevMove.start,
+          end: prevMove.end,
+          pieceType: _board.getPiece(prevMove.end)?.type ?? PieceType.pawn,
+          isCapture: false,
+        );
+      } else if (widget.puzzle.previousMove != null) {
+        final prevMove = widget.puzzle.previousMove!;
+        lastMoveRecord = MoveRecord(
+          start: prevMove.start,
+          end: prevMove.end,
+          pieceType: _board.getPiece(prevMove.end)?.type ?? PieceType.pawn,
+          isCapture: false,
+        );
+      }
+
       setState(() {
         _selectedPosition = pos;
         _validMoves = RulesEngine.getLegalMoves(
           pos,
           _board,
-          lastMove: _currentMoveIndex > 0
-              ? MoveRecord(
-                  start: (_activeSolutionLine ?? widget.puzzle.solutionMoves)[_currentMoveIndex - 1].start,
-                  end: (_activeSolutionLine ?? widget.puzzle.solutionMoves)[_currentMoveIndex - 1].end,
-                  pieceType: _board.getPiece((_activeSolutionLine ?? widget.puzzle.solutionMoves)[_currentMoveIndex - 1].end)?.type ?? PieceType.pawn,
-                  isCapture: false,
-                )
-              : null,
+          lastMove: lastMoveRecord,
         );
       });
     } else {
@@ -449,43 +465,55 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   }
 
   void _executeUserMove(Position start, Position end, {PieceType? chosenPromotion}) {
-    // Find candidate solution line matching move at _currentMoveIndex
-    final allSolutions = widget.puzzle.allSolutions;
-    List<PuzzleMove>? matchingLine;
-
-    for (final line in allSolutions) {
-      if (_currentMoveIndex >= line.length) continue;
+    // Find candidate solution line(s) matching move at _currentMoveIndex
+    final matchingLines = _candidateSolutionLines.where((line) {
+      if (_currentMoveIndex >= line.length) return false;
       final moveAtIdx = line[_currentMoveIndex];
       final isPosMatch = start == moveAtIdx.start && end == moveAtIdx.end;
       bool isPromoMatch = true;
-      if (moveAtIdx.promotionPiece != null && chosenPromotion != null) {
-        if (chosenPromotion != moveAtIdx.promotionPiece) {
-          isPromoMatch = false;
-        }
+      if (moveAtIdx.promotionPiece != null) {
+        isPromoMatch = chosenPromotion == moveAtIdx.promotionPiece;
       }
+      return isPosMatch && isPromoMatch;
+    }).toList();
 
-      if (isPosMatch && isPromoMatch) {
-        if (_activeSolutionLine != null) {
-          if (line == _activeSolutionLine) {
-            matchingLine = line;
-            break;
-          }
-        } else {
-          matchingLine = line;
-          break;
-        }
-      }
-    }
-
-    final isCorrect = matchingLine != null;
-    if (isCorrect) {
-      _activeSolutionLine = matchingLine;
-    } else {
-      _madeWrongMove = true;
-    }
-
+    final isCorrect = matchingLines.isNotEmpty;
     final piece = _board.getPiece(start);
     final target = _board.getPiece(end);
+
+    _failTimer?.cancel();
+    _opponentTimer?.cancel();
+
+    if (!isCorrect) {
+      // Immediate rejection of incorrect move
+      final finalPiece = chosenPromotion != null && piece != null
+          ? DynamoPiece(type: chosenPromotion, color: piece.color)
+          : piece;
+
+      setState(() {
+        _madeWrongMove = true;
+        _board.setPiece(end, finalPiece);
+        _board.setPiece(start, null);
+        _lastMoveStart = start;
+        _lastMoveEnd = end;
+        _selectedPosition = null;
+        _validMoves = [];
+        _isSolved = true;
+      });
+
+      AudioService().playGameOver();
+
+      _failTimer = Timer(const Duration(milliseconds: 400), () {
+        if (mounted) {
+          setState(() {
+            _showFailOverlay = true;
+          });
+        }
+      });
+      return;
+    }
+
+    _candidateSolutionLines = matchingLines;
 
     setState(() {
       // Play sound
@@ -495,7 +523,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
         AudioService().playMove();
       }
 
-      // Execute the move on the board (even if wrong)
+      // Execute the move on the board
       final finalPiece = chosenPromotion != null && piece != null
           ? DynamoPiece(type: chosenPromotion, color: piece.color)
           : piece;
@@ -510,10 +538,11 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
       _selectedPosition = null;
       _validMoves = [];
 
-      final currentLine = _activeSolutionLine ?? widget.puzzle.solutionMoves;
+      final currentLine = _candidateSolutionLines.first;
+      final targetUserMoves = (currentLine.length + 1) ~/ 2;
 
       // Check if user has completed all their moves
-      if (_userMoveCount >= _totalUserMoves) {
+      if (_userMoveCount >= targetUserMoves) {
         _onPuzzleCompleted();
       } else if (_currentMoveIndex < currentLine.length) {
         // Trigger Opponent Move
@@ -521,7 +550,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
             ? PlayerColor.black
             : PlayerColor.white;
         
-        Timer(const Duration(milliseconds: 800), _executeOpponentMove);
+        _opponentTimer = Timer(const Duration(milliseconds: 800), _executeOpponentMove);
       } else {
         // No more solution moves but user hasn't finished — puzzle ends
         _onPuzzleCompleted();
@@ -530,27 +559,41 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
   }
 
   void _executeOpponentMove() {
-    if (_isSolved || _showFailOverlay) return;
-    final currentLine = _activeSolutionLine ?? widget.puzzle.solutionMoves;
+    if (!mounted || _isSolved || _showFailOverlay || _currentTurn == widget.puzzle.startTurn) return;
+    if (_candidateSolutionLines.isEmpty) return;
+    final currentLine = _candidateSolutionLines.first;
     if (_currentMoveIndex >= currentLine.length) return;
 
     final expectedMove = currentLine[_currentMoveIndex];
     final piece = _board.getPiece(expectedMove.start);
     final target = _board.getPiece(expectedMove.end);
 
-    // If the piece isn't there (user deviated), skip the opponent move
-    // and just hand the turn back to the user
-    if (piece == null) {
+    // Opponent piece validation: piece must exist and belong to opponent
+    final opponentColor = widget.puzzle.startTurn == PlayerColor.white
+        ? PlayerColor.black
+        : PlayerColor.white;
+
+    if (piece == null || piece.color != opponentColor) {
       setState(() {
         _currentMoveIndex++;
         _currentTurn = widget.puzzle.startTurn;
+        final targetUserMoves = (currentLine.length + 1) ~/ 2;
         // If no more moves, end the puzzle
-        if (_userMoveCount >= _totalUserMoves || _currentMoveIndex >= currentLine.length) {
+        if (_userMoveCount >= targetUserMoves || _currentMoveIndex >= currentLine.length) {
           _onPuzzleCompleted();
         }
       });
       return;
     }
+
+    // Keep candidate lines that match this opponent move
+    _candidateSolutionLines = _candidateSolutionLines.where((line) {
+      if (_currentMoveIndex >= line.length) return false;
+      final m = line[_currentMoveIndex];
+      return m.start == expectedMove.start &&
+          m.end == expectedMove.end &&
+          m.promotionPiece == expectedMove.promotionPiece;
+    }).toList();
 
     setState(() {
       if (target != null) {
@@ -580,14 +623,17 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
       _currentMoveIndex++;
       _currentTurn = widget.puzzle.startTurn; // Hand turn back to user
       
+      final targetUserMoves = (currentLine.length + 1) ~/ 2;
       // Check if all user moves are done
-      if (_userMoveCount >= _totalUserMoves || _currentMoveIndex >= currentLine.length) {
+      if (_userMoveCount >= targetUserMoves || _currentMoveIndex >= currentLine.length) {
         _onPuzzleCompleted();
       }
     });
   }
 
   void _onPuzzleCompleted() {
+    _opponentTimer?.cancel();
+    _failTimer?.cancel();
     AudioService().playGameOver();
     setState(() {
       _isSolved = true;
@@ -773,8 +819,10 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (details) {
-            final x = (details.localPosition.dx / squareSize).floor();
-            final y = (details.localPosition.dy / squareSize).floor();
+            final rawX = (details.localPosition.dx / squareSize).floor();
+            final rawY = (details.localPosition.dy / squareSize).floor();
+            final x = isUserWhite ? rawX : 9 - rawX;
+            final y = isUserWhite ? rawY : 9 - rawY;
             _onSquareTapped(Position(x, y));
           },
           child: Container(
@@ -807,7 +855,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
                       checkPos: RulesEngine.isCheck(_currentTurn, _board)
                           ? _findKing(_currentTurn)
                           : null,
-                      isWhite: true,
+                      isWhite: isUserWhite,
                       theme: 'classic',
                     ),
                   ),
@@ -816,9 +864,11 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
                 // Layer 3: Pieces
                 IgnorePointer(
                   child: Column(
-                    children: List.generate(10, (y) {
+                    children: List.generate(10, (rawY) {
                       return Row(
-                        children: List.generate(10, (x) {
+                        children: List.generate(10, (rawX) {
+                          final x = isUserWhite ? rawX : 9 - rawX;
+                          final y = isUserWhite ? rawY : 9 - rawY;
                           final pos = Position(x, y);
                           final piece = _board.getPiece(pos);
 
@@ -845,7 +895,7 @@ class _PuzzlePlayScreenState extends State<PuzzlePlayScreen> {
                     painter: BoardForegroundPainter(
                       board: _board,
                       validMoves: _validMoves,
-                      isWhite: true,
+                      isWhite: isUserWhite,
                     ),
                   ),
                 ),

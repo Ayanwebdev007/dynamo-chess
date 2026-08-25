@@ -22,6 +22,8 @@ import '../core/ai_engine.dart';
 import '../core/settings_controller.dart';
 import '../core/tournament_service.dart';
 import '../core/position_storage_service.dart';
+import '../core/pgn_service.dart';
+import 'pgn_dialog.dart';
 
 class BoardScreen extends StatefulWidget {
   final GameSettings settings;
@@ -78,10 +80,13 @@ class _BoardScreenState extends State<BoardScreen> {
   bool _hasScheduledAutoQuit = false; // Prevent double auto-quitting
   bool _hasCompletedInitialSync = false; // First time sync from Firebase
   bool _canPop = false;
+  late bool _amIWhite;
+  Map<String, dynamic>? _rematchData;
 
   @override
   void initState() {
     super.initState();
+    _amIWhite = widget.isWhite;
     
     // Initialize GameState first
     final board = DynamoBoard();
@@ -241,7 +246,12 @@ class _BoardScreenState extends State<BoardScreen> {
       final stopwatch = Stopwatch()..start();
       
       // Depth 2 provides a good balance of speed and casual intelligence without blocking
-      final bestMove = await AIEngine.getBestMove(_gameState.board, aiColor, 2);
+      final bestMove = await AIEngine.getBestMove(
+        _gameState.board, 
+        aiColor, 
+        2, 
+        lastMove: _gameState.history.isNotEmpty ? _gameState.history.last : null,
+      );
 
       // Ensure at least 2 seconds have passed since the start of thinking
       final elapsed = stopwatch.elapsedMilliseconds;
@@ -324,6 +334,47 @@ class _BoardScreenState extends State<BoardScreen> {
       } else {
         _invitationTimeoutTimer?.cancel();
         _invitationTimeoutTimer = null;
+      }
+
+      // Rematch stream detection
+      if (data['rematch'] != null) {
+        final rematch = Map<String, dynamic>.from(data['rematch'] as Map);
+        setState(() {
+          _rematchData = rematch;
+        });
+
+        if (rematch['status'] == 'declined' && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rematch request was declined'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (_rematchData != null) {
+        setState(() {
+          _rematchData = null;
+        });
+      }
+
+      // Detect Rematch Acceptance (status returned to 'playing' while game over overlay was active)
+      if (status == 'playing' && (_gameState.status != GameStatus.playing || _showGameOverOverlay)) {
+        final currentUid = _auth.currentUser?.uid;
+        final newIsWhite = (data['whitePlayerId'] == currentUid);
+        setState(() {
+          _amIWhite = newIsWhite;
+          _showGameOverOverlay = false;
+          _hasRecordedResult = false;
+          _hasScheduledAutoQuit = false;
+          _rematchData = null;
+          _isAiThinking = false;
+          final board = DynamoBoard()..initializeBoard();
+          _gameState = GameState(
+            board: board,
+            settings: widget.settings,
+          );
+        });
       }
       
       if (status == 'aborted' || status == 'rejected') {
@@ -417,8 +468,34 @@ class _BoardScreenState extends State<BoardScreen> {
         final lm = data['lastMove'];
         final from = lm['from'];
         final to = lm['to'];
-        _gameState.lastMoveStart = Position(from['x'], from['y']);
-        _gameState.lastMoveEnd = Position(to['x'], to['y']);
+        final fromPos = Position(from['x'], from['y']);
+        final toPos = Position(to['x'], to['y']);
+        _gameState.lastMoveStart = fromPos;
+        _gameState.lastMoveEnd = toPos;
+
+        // Sync into history if not already recorded (e.g. opponent's move)
+        if (_gameState.history.isEmpty ||
+            _gameState.history.last.start != fromPos ||
+            _gameState.history.last.end != toPos) {
+          final movingPiece = _gameState.board.getPiece(fromPos);
+          final pieceTypeStr = lm['pieceType']?.toString();
+          PieceType pieceType = PieceType.pawn;
+          if (pieceTypeStr != null) {
+            pieceType = PieceType.values.firstWhere(
+              (t) => t.name == pieceTypeStr,
+              orElse: () => movingPiece?.type ?? PieceType.pawn,
+            );
+          } else if (movingPiece != null) {
+            pieceType = movingPiece.type;
+          }
+
+          _gameState.history.add(MoveRecord(
+            start: fromPos,
+            end: toPos,
+            pieceType: pieceType,
+            isCapture: movingPiece != null && _gameState.board.getPiece(toPos) != null,
+          ));
+        }
       }
 
       // Pre-calculate the current turn for accurate condition checks
@@ -583,7 +660,7 @@ class _BoardScreenState extends State<BoardScreen> {
     
     // Online Check: Can only move if it's my turn
     if (widget.onlineRoomId != null) {
-      final myColor = widget.isWhite ? PlayerColor.white : PlayerColor.black;
+      final myColor = _amIWhite ? PlayerColor.white : PlayerColor.black;
       if (_gameState.turn != myColor) {
         // Not my turn
         return;
@@ -597,7 +674,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
     // AI Check: Can't move if AI is thinking or it's AI's turn (unless it's an AI-initiated tap)
     if (widget.isVsComputer && !isAiTap) {
-      final myColor = widget.isWhite ? PlayerColor.white : PlayerColor.black;
+      final myColor = _amIWhite ? PlayerColor.white : PlayerColor.black;
       if (_gameState.turn != myColor || _isAiThinking) return;
     }
 
@@ -657,6 +734,7 @@ class _BoardScreenState extends State<BoardScreen> {
        _gameState.blackTime.inSeconds,
        lastMove.start,
        lastMove.end,
+       pieceType: lastMove.pieceType.name,
      );
   }
 
@@ -716,9 +794,32 @@ class _BoardScreenState extends State<BoardScreen> {
     return null;
   }
 
+  void _resetLocalGame() {
+    setState(() {
+      final board = DynamoBoard()..initializeBoard();
+      _gameState = GameState(
+        board: board,
+        settings: widget.settings,
+      );
+      _showGameOverOverlay = false;
+      _hasRecordedResult = false;
+      _hasScheduledAutoQuit = false;
+      
+      if (widget.isVsComputer) {
+        _amIWhite = !_amIWhite;
+        final myName = FirebaseAuth.instance.currentUser?.displayName ?? "You";
+        _whitePlayerName = _amIWhite ? myName : "Dynamo AI";
+        _blackPlayerName = _amIWhite ? "Dynamo AI" : myName;
+        if (!_amIWhite) {
+          _triggerAIMove();
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool amIWhite = widget.onlineRoomId == null ? true : widget.isWhite;
+    final bool amIWhite = _amIWhite;
     final PlayerColor topColor = amIWhite ? PlayerColor.black : PlayerColor.white;
     final PlayerColor bottomColor = amIWhite ? PlayerColor.white : PlayerColor.black;
     final Duration topTime = topColor == PlayerColor.white ? _gameState.whiteTime : _gameState.blackTime;
@@ -1252,34 +1353,8 @@ class _BoardScreenState extends State<BoardScreen> {
   Widget _buildMoveText(int index) {
     if (index >= _gameState.history.length) return const SizedBox();
     
-    final move = _gameState.history[index];
-    final endFile = String.fromCharCode(97 + move.end.x);
-    final endRank = 10 - move.end.y;
-    
-    String moveText;
-    if (move.pieceType == PieceType.king && (move.end.x - move.start.x).abs() >= 2) {
-      moveText = move.end.x > move.start.x ? "0-0" : "0-0-0";
-    } else {
-      String p = '';
-      if (move.pieceType == PieceType.king) p = 'K';
-      else if (move.pieceType == PieceType.queen) p = 'Q';
-      else if (move.pieceType == PieceType.missile) p = 'M';
-      else if (move.pieceType == PieceType.rook) p = 'R';
-      else if (move.pieceType == PieceType.bishop) p = 'B';
-      else if (move.pieceType == PieceType.knight) p = 'N';
-
-      if (move.isCapture) {
-        if (move.pieceType == PieceType.pawn) {
-          final startFile = String.fromCharCode(97 + move.start.x);
-          moveText = "${startFile}x$endFile$endRank";
-        } else {
-          moveText = "${p}x$endFile$endRank";
-        }
-      } else {
-        moveText = "$p$endFile$endRank";
-      }
-    }
-
+    final formattedMoves = PgnService.getFormattedMovesList(_gameState.history, initialFen: widget.initialFen);
+    final moveText = index < formattedMoves.length ? formattedMoves[index] : PgnService.moveToString(_gameState.history[index]);
     final isLastMove = index == _gameState.history.length - 1;
 
     return Container(
@@ -1293,26 +1368,38 @@ class _BoardScreenState extends State<BoardScreen> {
       ),
       child: Text(
         moveText,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
         style: GoogleFonts.robotoMono(
           color: isLastMove ? const Color(0xFFD4AF37) : Colors.white70,
           fontWeight: isLastMove ? FontWeight.bold : FontWeight.normal,
-          fontSize: 13,
+          fontSize: 12,
         ),
       ),
     );
   }
 
   Widget _buildGameOverOverlay() {
+    final currentUid = _auth.currentUser?.uid;
+    final isOnline = widget.onlineRoomId != null;
+    final isTournament = widget.tournamentId != null;
+
+    final hasPendingRematch = _rematchData != null && _rematchData!['status'] == 'pending';
+    final requestedByMe = hasPendingRematch && _rematchData!['requestedBy'] == currentUid;
+    final requestedByOpponent = hasPendingRematch && _rematchData!['requestedBy'] != currentUid;
+    final opponentName = _rematchData?['requestedByName'] ?? (_amIWhite ? _blackPlayerName : _whitePlayerName);
+
     return Container(
       color: Colors.black.withOpacity(0.85),
       child: Center(
         child: Container(
-          width: 300,
-          padding: const EdgeInsets.all(32),
+          width: 320,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
           decoration: BoxDecoration(
             color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFD4AF37), width: 1),
+            border: Border.all(color: const Color(0xFFD4AF37), width: 1.5),
             boxShadow: [
               BoxShadow(color: const Color(0xFFD4AF37).withOpacity(0.2), blurRadius: 30, spreadRadius: 5),
             ],
@@ -1321,40 +1408,263 @@ class _BoardScreenState extends State<BoardScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.emoji_events, color: Color(0xFFD4AF37), size: 48),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Text(
                 "GAME OVER",
-                style: GoogleFonts.cinzel(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                style: GoogleFonts.cinzel(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 _gameState.gameResult,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.montserrat(fontSize: 14, color: Colors.white70),
               ),
-              const SizedBox(height: 30),
-              ElevatedButton(
+              const SizedBox(height: 24),
+
+              // Live Chat Message Toast in Game Over Overlay
+              if (isOnline && _lastChatMessage != null) ...[
+                InkWell(
+                  onTap: _showChat,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4AF37).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.chat, color: Color(0xFFD4AF37), size: 14),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _lastChatMessage!,
+                            style: GoogleFonts.montserrat(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, color: Color(0xFFD4AF37), size: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              // Quick Post-Game Reactions for Online Games
+              if (isOnline) ...[
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildQuickChatChip("GG! 🤝"),
+                      const SizedBox(width: 6),
+                      _buildQuickChatChip("Well played! 👏"),
+                      const SizedBox(width: 6),
+                      _buildQuickChatChip("Rematch? 🔄"),
+                      const SizedBox(width: 6),
+                      _buildQuickChatChip("Thanks! 👍"),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // Rematch Section (if not tournament)
+              if (!isTournament) ...[
+                if (isOnline) ...[
+                  if (requestedByMe) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFD4AF37)),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Waiting for opponent...",
+                                style: GoogleFonts.montserrat(color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              widget.onlineService?.cancelRematch(widget.onlineRoomId!);
+                            },
+                            child: Text("CANCEL REQUEST", style: GoogleFonts.montserrat(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ] else if (requestedByOpponent) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4AF37).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFD4AF37)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            "$opponentName wants a rematch!",
+                            style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    widget.onlineService?.acceptRematch(widget.onlineRoomId!, widget.settings.timeLimit.inSeconds);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFD4AF37),
+                                    foregroundColor: Colors.black,
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  child: Text("ACCEPT", style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    widget.onlineService?.declineRematch(widget.onlineRoomId!);
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white60,
+                                    side: const BorderSide(color: Colors.white24),
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  child: Text("DECLINE", style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        final myName = _auth.currentUser?.displayName ?? 'Player';
+                        final uid = _auth.currentUser?.uid ?? 'unknown';
+                        widget.onlineService?.requestRematch(widget.onlineRoomId!, uid, myName);
+                      },
+                      icon: const Icon(Icons.replay, size: 18),
+                      label: Text("REMATCH", style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD4AF37),
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(double.infinity, 44),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ] else ...[
+                  // Offline / Vs AI
+                  ElevatedButton.icon(
+                    onPressed: _resetLocalGame,
+                    icon: const Icon(Icons.replay, size: 18),
+                    label: Text("PLAY AGAIN", style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 13)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4AF37),
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+
+              // Post-Game Chat Button for Online matches
+              if (isOnline) ...[
+                OutlinedButton.icon(
+                  onPressed: _showChat,
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.chat_bubble_outline, size: 16, color: Color(0xFFD4AF37)),
+                      if (_hasNewMessages)
+                        Positioned(
+                          right: -3,
+                          top: -3,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                          ),
+                        ),
+                    ],
+                  ),
+                  label: Text(
+                    _hasNewMessages ? "POST-GAME CHAT (NEW)" : "POST-GAME CHAT",
+                    style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.5)),
+                    minimumSize: const Size(double.infinity, 40),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // PGN Export Button (Available for all game modes: Bot, Online, Local)
+              OutlinedButton.icon(
+                onPressed: _showPgnDialog,
+                icon: const Icon(Icons.file_download_outlined, size: 16, color: Color(0xFFD4AF37)),
+                label: Text(
+                  "SAVE / SHARE PGN",
+                  style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.5)),
+                  minimumSize: const Size(double.infinity, 40),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              OutlinedButton(
                 onPressed: () {
-                  print('🚀 QUIT: Tapped Quit to Menu. Popping BoardScreen.');
-                  // Ensure we clear any pending state before leaving
                   _timer?.cancel();
                   _gameSubscription?.cancel();
                   _chatSubscription?.cancel();
                   _invitationSubscription?.cancel();
-                  
-                  // Use popUntil to go back to the previous stable screen (usually tournament or lobby)
-                  // If we are deep in a stack, this ensures we exit the board completely.
                   Navigator.of(context).pop();
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD4AF37),
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white24),
+                  minimumSize: const Size(double.infinity, 40),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: Text('QUIT TO MENU', style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+                child: Text("QUIT TO MENU", style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 12)),
               ),
-              if (widget.tournamentId != null) ...[
+              if (isTournament) ...[
                 const SizedBox(height: 16),
                 Text(
                   "RETURNING TO COMMAND CENTER...",
@@ -1362,6 +1672,63 @@ class _BoardScreenState extends State<BoardScreen> {
                 ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _sendQuickChat(String text) {
+    if (widget.onlineRoomId == null) return;
+    final myName = _auth.currentUser?.displayName ?? 'Player';
+    final uid = _auth.currentUser?.uid ?? 'unknown';
+    widget.onlineService?.sendChatMessage(widget.onlineRoomId!, uid, myName, text);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Sent: \"$text\"", style: GoogleFonts.montserrat()),
+          backgroundColor: const Color(0xFFD4AF37),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  void _showPgnDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => PgnDialog(
+        whitePlayer: _whitePlayerName,
+        blackPlayer: _blackPlayerName,
+        result: _gameState.gameResult,
+        history: _gameState.history,
+        event: widget.isVsComputer
+            ? "Dynamo Chess vs AI"
+            : (widget.onlineRoomId != null ? "Dynamo Chess Online Match" : "Dynamo Chess Casual Match"),
+        timeControl: "${widget.settings.timeLimit.inSeconds}",
+        termination: _gameState.gameResult,
+        initialFen: widget.initialFen,
+      ),
+    );
+  }
+
+  Widget _buildQuickChatChip(String text) {
+    return InkWell(
+      onTap: () => _sendQuickChat(text),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.35)),
+        ),
+        child: Text(
+          text,
+          style: GoogleFonts.montserrat(
+            color: const Color(0xFFD4AF37),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -1862,7 +2229,7 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   Widget _buildPiecesLayer(double squareSize) {
-    final bool amIWhite = widget.isWhite;
+    final bool amIWhite = _amIWhite;
     return Column(
       mainAxisSize: MainAxisSize.max,
       children: List.generate(10, (rawY) {

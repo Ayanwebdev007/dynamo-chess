@@ -5,9 +5,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../core/online_service.dart';
 import 'auth/login_screen.dart';
 import 'game_review_screen.dart';
+import 'full_history_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final String? targetUserId;
+  final String? targetPlayerName;
+
+  const ProfileScreen({
+    super.key,
+    this.targetUserId,
+    this.targetPlayerName,
+  });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -43,15 +51,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfileData() async {
     final user = FirebaseAuth.instance.currentUser;
+    final uid = widget.targetUserId ?? user?.uid;
     
-    if (user == null) {
+    if (uid == null) {
       setState(() => _isLoading = false);
       return;
     }
 
     try {
-      final stats = await _onlineService.getUserStats(user.uid);
-      final history = await _onlineService.getGameHistory(user.uid, limit: 20);
+      final stats = await _onlineService.getUserStats(uid);
+      final history = await _onlineService.getGameHistory(uid, limit: 100);
       
       setState(() {
         _stats = stats;
@@ -302,20 +311,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 40),
 
             // Match History
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'ACTIVITY LOG',
-                style: GoogleFonts.montserrat(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFFD4AF37),
-                  letterSpacing: 4,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _gameHistory.isEmpty ? 'ACTIVITY LOG' : 'ACTIVITY LOG (${_gameHistory.length})',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFD4AF37),
+                    letterSpacing: 3,
+                  ),
                 ),
-              ),
+                if (_gameHistory.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () {
+                      final uid = widget.targetUserId ?? user.uid;
+                      final name = widget.targetPlayerName ?? user.displayName;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FullHistoryScreen(
+                            userId: uid,
+                            playerName: name,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.history, color: Color(0xFFD4AF37), size: 16),
+                    label: Text(
+                      'VIEW ALL',
+                      style: GoogleFonts.montserrat(
+                        color: const Color(0xFFD4AF37),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 16),
-            _buildExecutiveHistory(),
+            const SizedBox(height: 12),
+            _buildExecutiveHistory(user),
 
             const SizedBox(height: 40),
 
@@ -417,7 +454,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildExecutiveHistory() {
+  Widget _buildExecutiveHistory(User user) {
     if (_gameHistory.isEmpty) {
       return Center(
         child: Text(
@@ -430,10 +467,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final recentGames = _gameHistory.take(7).toList();
 
     return Column(
-      children: recentGames.map((game) {
-        final isLast = recentGames.indexOf(game) == recentGames.length - 1;
-        return _buildExecutiveHistoryRow(game, isLast: isLast);
-      }).toList(),
+      children: [
+        ...recentGames.map((game) {
+          final isLast = recentGames.indexOf(game) == recentGames.length - 1;
+          return _buildExecutiveHistoryRow(game, isLast: isLast);
+        }).toList(),
+        if (_gameHistory.length > 7) ...[
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: () {
+              final uid = widget.targetUserId ?? user.uid;
+              final name = widget.targetPlayerName ?? user.displayName;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FullHistoryScreen(
+                    userId: uid,
+                    playerName: name,
+                  ),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4AF37).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'VIEW ALL ${_gameHistory.length} MATCHES',
+                    style: GoogleFonts.montserrat(
+                      color: const Color(0xFFD4AF37),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward, color: Color(0xFFD4AF37), size: 14),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

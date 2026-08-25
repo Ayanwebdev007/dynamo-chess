@@ -161,7 +161,7 @@ class OnlineService {
   }
 
   // Make a move
-  Future<void> makeMove(String roomId, String fen, PlayerColor nextTurn, int wTime, int bTime, Position from, Position to) async {
+  Future<void> makeMove(String roomId, String fen, PlayerColor nextTurn, int wTime, int bTime, Position from, Position to, {String? pieceType}) async {
     final gameRef = _db.child('games').child(roomId);
     
     // Record basic move update
@@ -172,7 +172,8 @@ class OnlineService {
       'blackTime': bTime,
       'lastMove': {
         'from': {'x': from.x, 'y': from.y},
-        'to': {'x': to.x, 'y': to.y}
+        'to': {'x': to.x, 'y': to.y},
+        if (pieceType != null) 'pieceType': pieceType,
       },
       'lastMoveTimestamp': ServerValue.timestamp,
     });
@@ -183,6 +184,7 @@ class OnlineService {
       'timestamp': ServerValue.timestamp,
       'from': {'x': from.x, 'y': from.y},
       'to': {'x': to.x, 'y': to.y},
+      if (pieceType != null) 'pieceType': pieceType,
       'player': nextTurn == PlayerColor.white ? 'black' : 'white', // The player who just moved
     });
   }
@@ -193,6 +195,68 @@ class OnlineService {
     await gameRef.update({
       'status': newStatus,
       'gameMethod': 'resignation',  // Mark how the game ended
+    });
+  }
+
+  Future<void> requestRematch(String roomId, String userId, String userName) async {
+    final gameRef = _db.child('games').child(roomId);
+    await gameRef.child('rematch').set({
+      'requestedBy': userId,
+      'requestedByName': userName,
+      'status': 'pending',
+      'timestamp': ServerValue.timestamp,
+    });
+  }
+
+  Future<void> declineRematch(String roomId) async {
+    final gameRef = _db.child('games').child(roomId);
+    await gameRef.child('rematch').update({
+      'status': 'declined',
+      'timestamp': ServerValue.timestamp,
+    });
+  }
+
+  Future<void> cancelRematch(String roomId) async {
+    final gameRef = _db.child('games').child(roomId);
+    await gameRef.child('rematch').remove();
+  }
+
+  Future<void> acceptRematch(String roomId, int timeLimitSeconds) async {
+    final gameRef = _db.child('games').child(roomId);
+    final snapshot = await gameRef.get();
+    if (!snapshot.exists) return;
+
+    final gameData = Map<dynamic, dynamic>.from(snapshot.value as Map);
+    final oldWhiteId = gameData['whitePlayerId'];
+    final oldWhiteName = gameData['whitePlayerName'];
+    final oldBlackId = gameData['blackPlayerId'];
+    final oldBlackName = gameData['blackPlayerName'];
+
+    const startingFen = 'rnbmqkmbnr/pppppppppp/10/10/10/10/10/10/PPPPPPPPPP/RNBMQKMBNR w - -';
+
+    // Clear moveHistory for the new game
+    await gameRef.child('moveHistory').remove();
+
+    // Reset game room with swapped colors for a balanced rematch
+    await gameRef.update({
+      'boardState': startingFen,
+      'turn': 'white',
+      'status': 'playing',
+      'whiteTime': timeLimitSeconds,
+      'blackTime': timeLimitSeconds,
+      'whitePlayerId': oldBlackId,
+      'whitePlayerName': oldBlackName,
+      'blackPlayerId': oldWhiteId,
+      'blackPlayerName': oldWhiteName,
+      'lastMove': null,
+      'winnerId': null,
+      'gameMethod': null,
+      'finishedAt': null,
+      'lastMoveTimestamp': ServerValue.timestamp,
+      'rematch': {
+        'status': 'accepted',
+        'timestamp': ServerValue.timestamp,
+      },
     });
   }
 
@@ -419,14 +483,13 @@ class OnlineService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getGameHistory(String userId, {int limit = 20}) async {
+  Future<List<Map<String, dynamic>>> getGameHistory(String userId, {int limit = 100}) async {
     try {
-      final snapshot = await _db
-          .child('gameHistory')
-          .child(userId)
-          .orderByChild('finishedAt')
-          .limitToLast(limit)
-          .get();
+      Query query = _db.child('gameHistory').child(userId).orderByChild('finishedAt');
+      if (limit > 0) {
+        query = query.limitToLast(limit);
+      }
+      final snapshot = await query.get();
       
       if (!snapshot.exists) return [];
       

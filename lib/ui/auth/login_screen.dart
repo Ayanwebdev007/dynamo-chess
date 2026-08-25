@@ -49,12 +49,35 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0F0F0F),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFFD4AF37)),
+          tooltip: "Back to Menu",
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "SIGN IN",
+          style: GoogleFonts.cinzel(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFFD4AF37),
+            letterSpacing: 2,
+          ),
+        ),
+        centerTitle: true,
+      ),
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1E1E1E), Color(0xFF0F0F0F)],
+          gradient: RadialGradient(
+            center: Alignment(0, -0.2),
+            radius: 1.5,
+            colors: [
+              Color(0xFF1E3A20), // Subtle Green Glow
+              Color(0xFF0A0E0A), // Black
+            ],
           ),
         ),
         child: Center(

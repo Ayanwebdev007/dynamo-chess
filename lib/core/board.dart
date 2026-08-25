@@ -20,6 +20,16 @@ class DynamoBoard {
     return grid[pos.y][pos.x];
   }
 
+  DynamoBoard clone() {
+    final copy = DynamoBoard();
+    for (int y = 0; y < 10; y++) {
+      for (int x = 0; x < 10; x++) {
+        copy.grid[y][x] = grid[y][x];
+      }
+    }
+    return copy;
+  }
+
   void initializeBoard() {
     // Fill Pawns
     for (int x = 0; x < 10; x++) {

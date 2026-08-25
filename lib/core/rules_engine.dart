@@ -47,6 +47,19 @@ class RulesEngine {
     for (final end in potentialMoves) {
       // Simulate
       final originalPieceAtEnd = board.getPiece(end);
+      final isEnPassant = piece.type == PieceType.pawn &&
+          start.x != end.x &&
+          originalPieceAtEnd == null &&
+          lastMove != null &&
+          lastMove.pieceType == PieceType.pawn &&
+          lastMove.distanceY >= 2 &&
+          end.x == lastMove.end.x;
+
+      final originalCapturedPawn = isEnPassant ? board.getPiece(lastMove.end) : null;
+      if (isEnPassant) {
+        board.setPiece(lastMove.end, null);
+      }
+
       board.setPiece(end, piece);
       board.setPiece(start, null);
       
@@ -57,6 +70,9 @@ class RulesEngine {
       // Revert
       board.setPiece(start, piece);
       board.setPiece(end, originalPieceAtEnd);
+      if (isEnPassant) {
+        board.setPiece(lastMove.end, originalCapturedPawn);
+      }
     }
     return legalMoves;
   }

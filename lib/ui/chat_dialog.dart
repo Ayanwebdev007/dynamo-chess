@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_database/firebase_database.dart';
 import '../core/online_service.dart';
 
 class ChatDialog extends StatefulWidget {
@@ -121,7 +120,24 @@ class _ChatDialogState extends State<ChatDialog> {
                       },
                     ),
             ),
-            const SizedBox(height: 12),
+            // Quick preset message chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildQuickChip("Good game! 🤝"),
+                  const SizedBox(width: 6),
+                  _buildQuickChip("Well played! 👏"),
+                  const SizedBox(width: 6),
+                  _buildQuickChip("Rematch? 🔄"),
+                  const SizedBox(width: 6),
+                  _buildQuickChip("Great match! 🏆"),
+                  const SizedBox(width: 6),
+                  _buildQuickChip("Thanks! 👍"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -153,6 +169,32 @@ class _ChatDialogState extends State<ChatDialog> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickChip(String text) {
+    return InkWell(
+      onTap: () {
+        widget.onlineService.sendChatMessage(
+          widget.roomId,
+          widget.currentUserId,
+          widget.currentUserName,
+          text,
+        );
+      },
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+        ),
+        child: Text(
+          text,
+          style: GoogleFonts.montserrat(color: const Color(0xFFD4AF37), fontSize: 11, fontWeight: FontWeight.w500),
         ),
       ),
     );

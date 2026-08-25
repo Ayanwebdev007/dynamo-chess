@@ -69,10 +69,23 @@ class GameState {
       selectedPosition = pos;
       final canKingside = turn == PlayerColor.white ? whiteCanCastleKingside : blackCanCastleKingside;
       final canQueenside = turn == PlayerColor.white ? whiteCanCastleQueenside : blackCanCastleQueenside;
+
+      MoveRecord? effectiveLastMove;
+      if (history.isNotEmpty) {
+        effectiveLastMove = history.last;
+      } else if (lastMoveStart != null && lastMoveEnd != null) {
+        effectiveLastMove = MoveRecord(
+          start: lastMoveStart!,
+          end: lastMoveEnd!,
+          pieceType: board.getPiece(lastMoveEnd!)?.type ?? PieceType.pawn,
+          isCapture: false,
+        );
+      }
+
       validMoves = RulesEngine.getLegalMoves(
         pos, 
         board, 
-        lastMove: history.isNotEmpty ? history.last : null,
+        lastMove: effectiveLastMove,
         canCastleKingside: canKingside,
         canCastleQueenside: canQueenside,
       );
@@ -185,9 +198,17 @@ class GameState {
     if (piece.type == PieceType.pawn) {
       if (start.x != end.x && board.getPiece(end) == null) {
         // In Dynamo en-passant, we remove the pawn that just jumped 2 or 3 squares.
-        // This is always the last move in history before this execution.
-        if (history.isNotEmpty) {
-          final lastMove = history.last;
+        final lastMove = history.isNotEmpty
+            ? history.last
+            : (lastMoveStart != null && lastMoveEnd != null
+                ? MoveRecord(
+                    start: lastMoveStart!,
+                    end: lastMoveEnd!,
+                    pieceType: PieceType.pawn,
+                    isCapture: false,
+                  )
+                : null);
+        if (lastMove != null) {
           finalTargetType = lastMove.pieceType; // It was a pawn
           board.setPiece(lastMove.end, null);
         }

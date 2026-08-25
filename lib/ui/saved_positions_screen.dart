@@ -7,6 +7,8 @@ import '../core/models.dart';
 import 'board_screen.dart';
 import 'platform_asset_image.dart';
 
+import '../core/board.dart';
+
 class SavedPositionsScreen extends StatefulWidget {
   const SavedPositionsScreen({super.key});
 
@@ -37,64 +39,13 @@ class _SavedPositionsScreenState extends State<SavedPositionsScreen> {
   }
 
   void _showAddFenDialog() {
-    final titleController = TextEditingController();
-    final fenController = TextEditingController();
-
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
-        ),
-        title: Text(
-          "SAVE NEW POSITION",
-          style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              style: GoogleFonts.montserrat(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: "Title / Name",
-                labelStyle: GoogleFonts.montserrat(color: Colors.white54),
-                enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
-                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD4AF37))),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: fenController,
-              style: GoogleFonts.montserrat(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: "FEN Notation",
-                labelStyle: GoogleFonts.montserrat(color: Colors.white54),
-                enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
-                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD4AF37))),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("CANCEL", style: GoogleFonts.montserrat(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (fenController.text.trim().isNotEmpty) {
-                await _service.savePosition(titleController.text, fenController.text.trim());
-                if (mounted) Navigator.pop(context);
-                _loadPositions();
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-            child: Text("SAVE", style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
-          ),
-        ],
+      builder: (context) => PositionEditorDialog(
+        onSave: (title, fen) async {
+          await _service.savePosition(title, fen);
+          _loadPositions();
+        },
       ),
     );
   }
@@ -373,6 +324,525 @@ class _SavedPositionsScreenState extends State<SavedPositionsScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+class PositionEditorDialog extends StatefulWidget {
+  final Function(String title, String fen) onSave;
+
+  const PositionEditorDialog({super.key, required this.onSave});
+
+  @override
+  State<PositionEditorDialog> createState() => _PositionEditorDialogState();
+}
+
+class _PositionEditorDialogState extends State<PositionEditorDialog> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _fenController = TextEditingController();
+  late DynamoBoard _board;
+  PlayerColor _startTurn = PlayerColor.white;
+  PieceType? _selectedType = PieceType.queen;
+  PlayerColor? _selectedColor = PlayerColor.white;
+
+  @override
+  void initState() {
+    super.initState();
+    _board = DynamoBoard();
+    _board.initializeBoard();
+    _updateFen();
+  }
+
+  void _updateFen() {
+    final fen = FenConverter.toFen(_board.grid, _startTurn);
+    _fenController.text = fen;
+  }
+
+  void _onSquareTapped(Position pos) {
+    setState(() {
+      if (_selectedColor == null || _selectedType == null) {
+        _board.setPiece(pos, null);
+      } else {
+        _board.setPiece(pos, DynamoPiece(type: _selectedType!, color: _selectedColor!));
+      }
+      _updateFen();
+    });
+  }
+
+  void _loadStandardBoard() {
+    setState(() {
+      _board = DynamoBoard();
+      _board.initializeBoard();
+      _updateFen();
+    });
+  }
+
+  void _clearBoard() {
+    setState(() {
+      _board = DynamoBoard();
+      _updateFen();
+    });
+  }
+
+  void _applyFenInput(String fen) {
+    if (fen.trim().isEmpty) return;
+    try {
+      final newGrid = FenConverter.fromFen(fen.trim());
+      final turn = FenConverter.getTurn(fen.trim());
+      setState(() {
+        _board.grid = newGrid;
+        _startTurn = turn;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("FEN applied successfully!"),
+          backgroundColor: Color(0xFFD4AF37),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Invalid Dynamo FEN: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 720),
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "BOARD EDITOR & FEN",
+                    style: GoogleFonts.cinzel(
+                      color: const Color(0xFFD4AF37),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+
+            // Body
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title & Turn Row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: _titleController,
+                            style: GoogleFonts.montserrat(color: Colors.white, fontSize: 13),
+                            decoration: InputDecoration(
+                              labelText: "Position Title",
+                              labelStyle: GoogleFonts.montserrat(color: Colors.white54, fontSize: 12),
+                              hintText: "e.g., Endgame Practice #1",
+                              hintStyle: GoogleFonts.montserrat(color: Colors.white24, fontSize: 12),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.03),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: Colors.white12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<PlayerColor>(
+                            value: _startTurn,
+                            dropdownColor: const Color(0xFF2A2A2A),
+                            decoration: InputDecoration(
+                              labelText: "To Move",
+                              labelStyle: GoogleFonts.montserrat(color: Colors.white54, fontSize: 12),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.03),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: Colors.white12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: PlayerColor.white,
+                                child: Text("White", style: TextStyle(color: Colors.white, fontSize: 13)),
+                              ),
+                              DropdownMenuItem(
+                                value: PlayerColor.black,
+                                child: Text("Black", style: TextStyle(color: Colors.white, fontSize: 13)),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _startTurn = val;
+                                  _updateFen();
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Quick Actions
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _quickActionButton("Starting Setup", Icons.refresh, _loadStandardBoard),
+                        _quickActionButton("Clear Board", Icons.clear_all, _clearBoard),
+                        _quickActionButton("Copy FEN", Icons.copy, () {
+                          Clipboard.setData(ClipboardData(text: _fenController.text));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("FEN copied to clipboard!"),
+                              backgroundColor: Color(0xFFD4AF37),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Board + Piece Palettes
+                    Center(
+                      child: Column(
+                        children: [
+                          _buildPiecePalette(PlayerColor.black),
+                          const SizedBox(height: 8),
+                          _buildBoardWidget(),
+                          const SizedBox(height: 8),
+                          _buildPiecePalette(PlayerColor.white),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // FEN input / live display
+                    Text(
+                      "DYNAMO CHESS FEN NOTATION",
+                      style: GoogleFonts.cinzel(color: const Color(0xFFD4AF37), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _fenController,
+                            style: GoogleFonts.robotoMono(color: Colors.white, fontSize: 11),
+                            decoration: InputDecoration(
+                              hintText: "Paste or edit Dynamo FEN...",
+                              hintStyle: GoogleFonts.robotoMono(color: Colors.white24, fontSize: 11),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.03),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Colors.white12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () => _applyFenInput(_fenController.text),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4AF37).withOpacity(0.2),
+                            foregroundColor: const Color(0xFFD4AF37),
+                            side: const BorderSide(color: Color(0xFFD4AF37)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: Text("APPLY", style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Footer actions
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white60,
+                        side: const BorderSide(color: Colors.white24),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text("CANCEL", style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final title = _titleController.text.trim().isEmpty
+                            ? "Custom Position"
+                            : _titleController.text.trim();
+                        final fen = _fenController.text.trim();
+                        if (fen.isNotEmpty) {
+                          widget.onSave(title, fen);
+                          Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD4AF37),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text("SAVE POSITION", style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _quickActionButton(String label, IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: const Color(0xFFD4AF37)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.montserrat(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPiecePalette(PlayerColor color) {
+    final types = [
+      PieceType.pawn,
+      PieceType.knight,
+      PieceType.bishop,
+      PieceType.missile,
+      PieceType.rook,
+      PieceType.queen,
+      PieceType.king,
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ...types.map((type) => _buildPaletteItem(type, color)),
+          if (color == PlayerColor.white) ...[
+            const SizedBox(width: 6),
+            _buildEraserItem(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaletteItem(PieceType type, PlayerColor color) {
+    final isSelected = _selectedColor == color && _selectedType == type;
+    final typeName = type.toString().split('.').last;
+    final colorSuffix = color == PlayerColor.white ? 'w' : 'b';
+    final assetName = '${typeName}_$colorSuffix.png'.toLowerCase();
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedColor = color;
+          _selectedType = type;
+        });
+      },
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFD4AF37).withOpacity(0.25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: PlatformAssetImage(
+          assetPath: 'assets/pieces/$assetName',
+          viewType: 'palette_item_${typeName}_$colorSuffix',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEraserItem() {
+    final isSelected = _selectedColor == null;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedColor = null;
+          _selectedType = null;
+        });
+      },
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.redAccent.withOpacity(0.25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? Colors.redAccent : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: const Icon(Icons.cleaning_services, size: 16, color: Colors.white70),
+      ),
+    );
+  }
+
+  Widget _buildBoardWidget() {
+    const double size = 280;
+    const double squareSize = size / 10;
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5), width: 1.5),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 4)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Background squares & tap detection
+          Column(
+            children: List.generate(10, (y) {
+              return Row(
+                children: List.generate(10, (x) {
+                  final isLight = (x + y) % 2 == 0;
+                  final pos = Position(x, y);
+
+                  return GestureDetector(
+                    onTap: () => _onSquareTapped(pos),
+                    child: Container(
+                      width: squareSize,
+                      height: squareSize,
+                      color: isLight ? const Color(0xFFEBECD0) : const Color(0xFF779556),
+                    ),
+                  );
+                }),
+              );
+            }),
+          ),
+
+          // Piece layer
+          IgnorePointer(
+            child: Column(
+              children: List.generate(10, (y) {
+                return Row(
+                  children: List.generate(10, (x) {
+                    final pos = Position(x, y);
+                    final piece = _board.getPiece(pos);
+
+                    return SizedBox(
+                      width: squareSize,
+                      height: squareSize,
+                      child: piece == null
+                          ? null
+                          : Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: PlatformAssetImage(
+                                assetPath: 'assets/pieces/${piece.type.toString().split('.').last}_${piece.color == PlayerColor.white ? 'w' : 'b'}.png'.toLowerCase(),
+                                viewType: 'editor_piece_${pos.x}_${pos.y}',
+                              ),
+                            ),
+                    );
+                  }),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
